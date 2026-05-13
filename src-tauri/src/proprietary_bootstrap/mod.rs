@@ -72,25 +72,6 @@ pub fn public_state() -> PublicState {
     from_settings(settings.proprietary_bootstrap.as_ref())
 }
 
-#[cfg(feature = "proprietary-bootstrap")]
-fn update_state_from_settings<F>(mutator: F) -> Result<PublicState, String>
-where
-    F: FnOnce(&mut Option<ProprietaryBootstrapSettings>) -> Result<(), String>,
-{
-    let mut settings = crate::settings::get_settings();
-    mutator(&mut settings.proprietary_bootstrap)?;
-    crate::settings::update_settings(settings).map_err(|err| err.to_string())?;
-    Ok(public_state())
-}
-
-#[cfg(not(feature = "proprietary-bootstrap"))]
-fn update_state_from_settings<F>(_mutator: F) -> Result<PublicState, String>
-where
-    F: FnOnce(&mut Option<ProprietaryBootstrapSettings>) -> Result<(), String>,
-{
-    Ok(public_state())
-}
-
 fn ensure_install_id(settings: &mut ProprietaryBootstrapSettings) {
     if settings.install_id.trim().is_empty() {
         settings.install_id = uuid::Uuid::new_v4().to_string();
@@ -250,20 +231,6 @@ async fn run_once(
 pub async fn retry_startup(state: &AppState) -> Result<PublicState, String> {
     run_startup(state).await?;
     Ok(public_state())
-}
-
-pub(crate) fn set_bootstrap_state(settings: ProprietaryBootstrapSettings) -> Result<PublicState, String> {
-    update_state_from_settings(|slot| {
-        *slot = Some(settings);
-        Ok(())
-    })
-}
-
-pub(crate) fn clear_bootstrap_state() -> Result<PublicState, String> {
-    update_state_from_settings(|slot| {
-        *slot = None;
-        Ok(())
-    })
 }
 
 #[cfg(feature = "test-hooks")]
