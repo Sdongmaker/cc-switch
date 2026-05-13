@@ -201,12 +201,15 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CC_SWITCH_BOOTSTRAP_BASE_URL: ${{ secrets.BOOTSTRAP_BASE_URL }}
+          CC_SWITCH_BOOTSTRAP_CLIENT_ID: ${{ secrets.BOOTSTRAP_CLIENT_ID }}
+          CC_SWITCH_BOOTSTRAP_CLIENT_SECRET: ${{ secrets.BOOTSTRAP_CLIENT_SECRET }}
         run: |
           set -euo pipefail
           max_attempts=3
           for attempt in $(seq 1 "$max_attempts"); do
             echo "=== macOS build/notarization attempt ${attempt}/${max_attempts} ==="
-            if pnpm tauri build --target universal-apple-darwin; then
+            if pnpm tauri build --features proprietary-bootstrap --target universal-apple-darwin; then
               echo "✅ macOS build/notarization succeeded"
               exit 0
             fi
@@ -223,11 +226,19 @@ jobs:
 
       - name: Build Tauri App (Windows)
         if: runner.os == 'Windows'
-        run: pnpm tauri build
+        env:
+          CC_SWITCH_BOOTSTRAP_BASE_URL: ${{ secrets.BOOTSTRAP_BASE_URL }}
+          CC_SWITCH_BOOTSTRAP_CLIENT_ID: ${{ secrets.BOOTSTRAP_CLIENT_ID }}
+          CC_SWITCH_BOOTSTRAP_CLIENT_SECRET: ${{ secrets.BOOTSTRAP_CLIENT_SECRET }}
+        run: pnpm tauri build --features proprietary-bootstrap
 
       - name: Build Tauri App (Linux)
         if: runner.os == 'Linux'
-        run: pnpm tauri build --bundles appimage,deb,rpm
+        env:
+          CC_SWITCH_BOOTSTRAP_BASE_URL: ${{ secrets.BOOTSTRAP_BASE_URL }}
+          CC_SWITCH_BOOTSTRAP_CLIENT_ID: ${{ secrets.BOOTSTRAP_CLIENT_ID }}
+          CC_SWITCH_BOOTSTRAP_CLIENT_SECRET: ${{ secrets.BOOTSTRAP_CLIENT_SECRET }}
+        run: pnpm tauri build --features proprietary-bootstrap --bundles appimage,deb,rpm
 
       - name: Prepare macOS Assets
         if: runner.os == 'macOS'

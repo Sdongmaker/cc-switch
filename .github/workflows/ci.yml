@@ -97,3 +97,9 @@ jobs:
 
       - name: Run tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Clippy (proprietary)
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --features proprietary-bootstrap -- -D warnings
+
+      - name: Run tests (proprietary)
+        run: cargo test --manifest-path src-tauri/Cargo.toml --features "proprietary-bootstrap,test-hooks"
