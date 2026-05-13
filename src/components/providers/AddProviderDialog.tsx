@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FullScreenPanel } from "@/components/common/FullScreenPanel";
 import type { Provider, CustomEndpoint, UniversalProvider } from "@/types";
 import type { AppId } from "@/lib/api";
+import type { ProprietaryBootstrapState } from "@/lib/api";
 import { universalProvidersApi } from "@/lib/api";
 import {
   ProviderForm,
@@ -32,6 +33,7 @@ interface AddProviderDialogProps {
       suggestedDefaults?: OpenClawSuggestedDefaults;
     },
   ) => Promise<void> | void;
+  bootstrapState?: ProprietaryBootstrapState;
 }
 
 export function AddProviderDialog({
@@ -39,8 +41,10 @@ export function AddProviderDialog({
   onOpenChange,
   appId,
   onSubmit,
+  bootstrapState,
 }: AddProviderDialogProps) {
   const { t } = useTranslation();
+  const isProprietaryLocked = bootstrapState?.enabled === true;
   // OpenCode and OpenClaw don't support universal providers
   const showUniversalTab =
     appId !== "opencode" &&
@@ -89,6 +93,15 @@ export function AddProviderDialog({
 
   const handleSubmit = useCallback(
     async (values: ProviderFormValues) => {
+      if (isProprietaryLocked) {
+        toast.error(
+          t("proprietaryBootstrap.providerCrudLocked", {
+            defaultValue: "专有版供应商由 NewAPI 托管，不能手动添加。",
+          }),
+        );
+        return;
+      }
+
       const parsedConfig = JSON.parse(values.settingsConfig) as Record<
         string,
         unknown
@@ -262,8 +275,12 @@ export function AddProviderDialog({
       await onSubmit(providerData);
       onOpenChange(false);
     },
-    [appId, onSubmit, onOpenChange],
+    [appId, onSubmit, onOpenChange, isProprietaryLocked, t],
   );
+
+  if (isProprietaryLocked) {
+    return null;
+  }
 
   const footer =
     !showUniversalTab || activeTab === "app-specific" ? (

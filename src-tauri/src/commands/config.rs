@@ -244,6 +244,10 @@ pub async fn set_claude_common_config_snippet(
     snippet: String,
     state: tauri::State<'_, crate::store::AppState>,
 ) -> Result<(), String> {
+    if crate::proprietary_bootstrap::is_enabled() {
+        return Err(crate::proprietary_bootstrap::guard::locked_error().to_string());
+    }
+
     let is_cleared = snippet.trim().is_empty();
 
     if !snippet.trim().is_empty() {
@@ -280,6 +284,15 @@ pub async fn set_common_config_snippet(
     snippet: String,
     state: tauri::State<'_, crate::store::AppState>,
 ) -> Result<(), String> {
+    if crate::proprietary_bootstrap::is_enabled()
+        && matches!(
+            app_type.as_str(),
+            "claude" | "codex" | "gemini" | "omo" | "omo-slim"
+        )
+    {
+        return Err(crate::proprietary_bootstrap::guard::locked_error().to_string());
+    }
+
     let is_cleared = snippet.trim().is_empty();
     let old_snippet = state
         .db

@@ -18,8 +18,8 @@ import { useTranslation } from "react-i18next";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { Provider } from "@/types";
-import type { AppId } from "@/lib/api";
-import { providersApi } from "@/lib/api/providers";
+import type { AppId, ProprietaryBootstrapState } from "@/lib/api";
+import { proprietaryBootstrapApi, providersApi } from "@/lib/api";
 import { useDragSort } from "@/hooks/useDragSort";
 import {
   useOpenClawLiveProviderIds,
@@ -68,6 +68,8 @@ interface ProviderListProps {
   isProxyTakeover?: boolean; // 代理接管模式（Live配置已被接管）
   activeProviderId?: string; // 代理当前实际使用的供应商 ID（用于故障转移模式下标注绿色边框）
   onSetAsDefault?: (provider: Provider) => void; // OpenClaw: set as default model
+  isProprietaryLocked?: boolean;
+  bootstrapState?: ProprietaryBootstrapState;
 }
 
 export function ProviderList({
@@ -90,6 +92,8 @@ export function ProviderList({
   isProxyTakeover = false,
   activeProviderId,
   onSetAsDefault,
+  isProprietaryLocked = false,
+  bootstrapState,
 }: ProviderListProps) {
   const { t } = useTranslation();
   const { checkProvider, isChecking } = useStreamCheck(appId);
@@ -274,6 +278,18 @@ export function ProviderList({
       toast.error(error.message);
     },
   });
+  const retryBootstrapMutation = useMutation({
+    mutationFn: () => proprietaryBootstrapApi.retry(),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["proprietaryBootstrap"],
+      });
+      await queryClient.invalidateQueries({ queryKey: ["providers", appId] });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -388,8 +404,17 @@ export function ProviderList({
     return (
       <ProviderEmptyState
         appId={appId}
-        onCreate={onCreate}
-        onImport={() => importMutation.mutate()}
+        onCreate={isProprietaryLocked ? undefined : onCreate}
+        onImport={
+          isProprietaryLocked ? undefined : () => importMutation.mutate()
+        }
+        bootstrapState={bootstrapState}
+        onRetryBootstrap={
+          isProprietaryLocked
+            ? () => retryBootstrapMutation.mutate()
+            : undefined
+        }
+        isRetryingBootstrap={retryBootstrapMutation.isPending}
       />
     );
   }
@@ -398,7 +423,7 @@ export function ProviderList({
     <DndContext
       sensors={sensors}
       collisionDetection={closestCenter}
-      onDragEnd={handleDragEnd}
+      onDragEnd={isProprietaryLocked ? undefined : handleDragEnd}
     >
       <SortableContext
         items={filteredProviders.map((provider) => provider.id)}
@@ -458,8 +483,11 @@ export function ProviderList({
                     : isProviderDefaultModel(provider.id)
                 }
                 onSetAsDefault={
-                  onSetAsDefault ? () => onSetAsDefault(provider) : undefined
+                  !isProprietaryLocked && onSetAsDefault
+                    ? () => onSetAsDefault(provider)
+                    : undefined
                 }
+                isProprietaryLocked={isProprietaryLocked}
               />
             );
           })}
@@ -604,6 +632,7 @@ interface SortableProviderCardProps {
   // OpenClaw: default model
   isDefaultModel?: boolean;
   onSetAsDefault?: () => void;
+  isProprietaryLocked: boolean;
 }
 
 function SortableProviderCard({
@@ -634,6 +663,7 @@ function SortableProviderCard({
   activeProviderId,
   isDefaultModel,
   onSetAsDefault,
+  isProprietaryLocked,
 }: SortableProviderCardProps) {
   const {
     setNodeRef,
@@ -666,7 +696,9 @@ function SortableProviderCard({
         onDisableOmoSlim={onDisableOmoSlim}
         onDuplicate={onDuplicate}
         onConfigureUsage={
-          onConfigureUsage ? (item) => onConfigureUsage(item) : () => undefined
+          !isProprietaryLocked && onConfigureUsage
+            ? (item) => onConfigureUsage(item)
+            : undefined
         }
         onOpenWebsite={onOpenWebsite}
         onOpenTerminal={onOpenTerminal}
@@ -687,6 +719,7 @@ function SortableProviderCard({
         // OpenClaw: default model
         isDefaultModel={isDefaultModel}
         onSetAsDefault={onSetAsDefault}
+        isProprietaryLocked={isProprietaryLocked}
       />
     </div>
   );

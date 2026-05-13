@@ -228,6 +228,16 @@ export interface WebDavSyncStatus {
   lastRemoteManifestHash?: string | null;
 }
 
+export interface ProprietaryBootstrapSettings {
+  installId: string;
+  status: string;
+  lastAction?: string | null;
+  lastSuccessAt?: number | null;
+  lastAttemptAt?: number | null;
+  lastError?: string | null;
+  providerBaseUrl?: string | null;
+}
+
 // WebDAV 同步配置
 export interface WebDavSyncSettings {
   enabled?: boolean;
@@ -276,6 +286,7 @@ export interface Settings {
   silentStartup?: boolean;
   // 是否启用主页面本地代理功能（默认关闭）
   enableLocalProxy?: boolean;
+  proprietaryBootstrap?: ProprietaryBootstrapSettings;
   // User has confirmed the local proxy first-run notice
   proxyConfirmed?: boolean;
   // User has confirmed the usage query first-run notice

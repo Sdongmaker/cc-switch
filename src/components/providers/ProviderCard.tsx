@@ -41,7 +41,7 @@ interface ProviderCardProps {
   onRemoveFromConfig?: (provider: Provider) => void;
   onDisableOmo?: () => void;
   onDisableOmoSlim?: () => void;
-  onConfigureUsage: (provider: Provider) => void;
+  onConfigureUsage?: (provider: Provider) => void;
   onOpenWebsite: (url: string) => void;
   onDuplicate: (provider: Provider) => void;
   onTest?: (provider: Provider) => void;
@@ -58,6 +58,7 @@ interface ProviderCardProps {
   // OpenClaw: default model
   isDefaultModel?: boolean;
   onSetAsDefault?: () => void;
+  isProprietaryLocked?: boolean;
 }
 
 /** 判断是否为官方供应商（无自定义 base URL / API key，直连官方 API） */
@@ -150,6 +151,7 @@ export function ProviderCard({
   // OpenClaw: default model
   isDefaultModel,
   onSetAsDefault,
+  isProprietaryLocked = false,
 }: ProviderCardProps) {
   const { t } = useTranslation();
 
@@ -281,19 +283,21 @@ export function ProviderCard({
       />
       <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-1 items-center gap-2">
-          <button
-            type="button"
-            className={cn(
-              "-ml-1.5 flex-shrink-0 cursor-grab active:cursor-grabbing p-1.5",
-              "text-muted-foreground/50 hover:text-muted-foreground transition-colors",
-              dragHandleProps?.isDragging && "cursor-grabbing",
-            )}
-            aria-label={t("provider.dragHandle")}
-            {...(dragHandleProps?.attributes ?? {})}
-            {...(dragHandleProps?.listeners ?? {})}
-          >
-            <GripVertical className="h-4 w-4" />
-          </button>
+          {!isProprietaryLocked && (
+            <button
+              type="button"
+              className={cn(
+                "-ml-1.5 flex-shrink-0 cursor-grab active:cursor-grabbing p-1.5",
+                "text-muted-foreground/50 hover:text-muted-foreground transition-colors",
+                dragHandleProps?.isDragging && "cursor-grabbing",
+              )}
+              aria-label={t("provider.dragHandle")}
+              {...(dragHandleProps?.attributes ?? {})}
+              {...(dragHandleProps?.listeners ?? {})}
+            >
+              <GripVertical className="h-4 w-4" />
+            </button>
+          )}
 
           <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center border border-border group-hover:scale-105 transition-transform duration-300">
             <ProviderIcon
@@ -365,6 +369,14 @@ export function ProviderCard({
                 >
                   {t("provider.managedByHermes", {
                     defaultValue: "Hermes Managed",
+                  })}
+                </span>
+              )}
+
+              {isProprietaryLocked && (
+                <span className="inline-flex items-center rounded-md bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                  {t("proprietaryBootstrap.managedBadge", {
+                    defaultValue: "已托管",
                   })}
                 </span>
               )}
@@ -472,7 +484,11 @@ export function ProviderCard({
                   : undefined
               }
               onConfigureUsage={
-                isOfficial || isCopilot || isCodexOauth
+                isProprietaryLocked ||
+                isOfficial ||
+                isCopilot ||
+                isCodexOauth ||
+                !onConfigureUsage
                   ? undefined
                   : () => onConfigureUsage(provider)
               }
@@ -492,6 +508,7 @@ export function ProviderCard({
               // OpenClaw: default model
               isDefaultModel={isDefaultModel}
               onSetAsDefault={onSetAsDefault}
+              isProprietaryLocked={isProprietaryLocked}
             />
           </div>
         </div>

@@ -169,6 +169,10 @@ pub fn get_claude_desktop_default_routes(
 pub fn import_claude_desktop_providers_from_claude(
     state: State<'_, AppState>,
 ) -> Result<usize, String> {
+    if crate::proprietary_bootstrap::is_enabled() {
+        return Err(crate::proprietary_bootstrap::guard::locked_error().to_string());
+    }
+
     let claude_providers = state
         .db
         .get_all_providers(AppType::Claude.as_str())
@@ -668,6 +672,10 @@ pub fn sync_universal_provider(
 
 #[tauri::command]
 pub fn import_opencode_providers_from_live(state: State<'_, AppState>) -> Result<usize, String> {
+    if crate::proprietary_bootstrap::is_enabled() {
+        return Ok(0);
+    }
+
     crate::services::provider::import_opencode_providers_from_live(state.inner())
         .map_err(|e| e.to_string())
 }

@@ -6,6 +6,10 @@ fn merge_settings_for_save(
     mut incoming: crate::settings::AppSettings,
     existing: &crate::settings::AppSettings,
 ) -> crate::settings::AppSettings {
+    if incoming.proprietary_bootstrap.is_none() {
+        incoming.proprietary_bootstrap = existing.proprietary_bootstrap.clone();
+    }
+
     match (&mut incoming.webdav_sync, &existing.webdav_sync) {
         // incoming 没有 webdav → 保留现有
         (None, _) => {
@@ -83,7 +87,7 @@ pub async fn set_auto_launch(enabled: bool) -> Result<bool, String> {
 #[cfg(test)]
 mod tests {
     use super::merge_settings_for_save;
-    use crate::settings::{AppSettings, WebDavSyncSettings};
+    use crate::settings::{AppSettings, ProprietaryBootstrapSettings, WebDavSyncSettings};
 
     #[test]
     fn save_settings_should_preserve_existing_webdav_when_payload_omits_it() {
@@ -202,6 +206,28 @@ mod tests {
         assert_eq!(
             merged.webdav_sync.as_ref().map(|v| v.password.as_str()),
             Some("")
+        );
+    }
+
+    #[test]
+    fn save_settings_should_preserve_existing_proprietary_bootstrap_when_payload_omits_it() {
+        let existing = AppSettings {
+            proprietary_bootstrap: Some(ProprietaryBootstrapSettings {
+                install_id: "install-123".to_string(),
+                status: "ready".to_string(),
+                ..ProprietaryBootstrapSettings::default()
+            }),
+            ..AppSettings::default()
+        };
+
+        let merged = merge_settings_for_save(AppSettings::default(), &existing);
+
+        assert_eq!(
+            merged
+                .proprietary_bootstrap
+                .as_ref()
+                .map(|value| value.install_id.as_str()),
+            Some("install-123")
         );
     }
 }

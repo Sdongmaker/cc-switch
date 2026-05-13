@@ -2568,6 +2568,22 @@
     "suggestedDefaults": "应用建议默认配置",
     "suggestedDefaultsHint": "使用此预设推荐的默认模型配置"
   },
+  "proprietaryBootstrap": {
+    "universalLocked": "专有版由 NewAPI 托管供应商，统一供应商管理已关闭。",
+    "managedBadge": "已托管",
+    "managed": "托管",
+    "pendingTitle": "正在开户注册",
+    "pendingDescription": "NewAPI 托管供应商正在同步，请稍候。",
+    "readyTitle": "正在同步供应商",
+    "readyDescription": "托管供应商状态已就绪，但本地列表尚未刷新。",
+    "errorTitle": "开户注册失败",
+    "errorDescription": "请检查网络后重试。",
+    "blockedTitle": "设备暂不可用",
+    "blockedDescription": "请联系支持处理当前设备状态。",
+    "retry": "重试",
+    "deeplinkProviderLocked": "专有版由 NewAPI 托管供应商，不能通过链接导入供应商。",
+    "providerCrudLocked": "专有版供应商由 NewAPI 托管，不能手动添加。"
+  },
   "subscription": {
     "title": "订阅额度",
     "fiveHour": "5小时",

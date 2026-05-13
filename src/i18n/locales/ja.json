@@ -2568,6 +2568,22 @@
     "suggestedDefaults": "推奨デフォルト設定を適用",
     "suggestedDefaultsHint": "このプリセットの推奨デフォルトモデル設定を使用します"
   },
+  "proprietaryBootstrap": {
+    "universalLocked": "プロプライエタリビルドでは NewAPI がプロバイダを管理するため、統一プロバイダ管理は無効です。",
+    "managedBadge": "管理済み",
+    "managed": "管理済み",
+    "pendingTitle": "アカウントを初期化中",
+    "pendingDescription": "NewAPI 管理プロバイダを同期しています。しばらくお待ちください。",
+    "readyTitle": "プロバイダを同期中",
+    "readyDescription": "管理プロバイダは準備完了ですが、ローカル一覧がまだ更新されていません。",
+    "errorTitle": "初期化に失敗しました",
+    "errorDescription": "ネットワークを確認して再試行してください。",
+    "blockedTitle": "この端末は利用できません",
+    "blockedDescription": "この端末状態についてサポートに連絡してください。",
+    "retry": "再試行",
+    "deeplinkProviderLocked": "プロプライエタリビルドでは NewAPI がプロバイダを管理するため、リンクからのプロバイダ導入は無効です。",
+    "providerCrudLocked": "プロプライエタリビルドでは NewAPI がプロバイダを管理するため、手動でのプロバイダ追加は無効です。"
+  },
   "subscription": {
     "title": "サブスクリプションクォータ",
     "fiveHour": "5時間",

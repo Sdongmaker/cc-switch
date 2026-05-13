@@ -24,6 +24,18 @@ export const settingsSchema = z.object({
   opencodeConfigDir: directorySchema.nullable().optional(),
   openclawConfigDir: directorySchema.nullable().optional(),
 
+  proprietaryBootstrap: z
+    .object({
+      installId: z.string(),
+      status: z.string(),
+      lastAction: z.string().nullable().optional(),
+      lastSuccessAt: z.number().nullable().optional(),
+      lastAttemptAt: z.number().nullable().optional(),
+      lastError: z.string().nullable().optional(),
+      providerBaseUrl: z.string().nullable().optional(),
+    })
+    .optional(),
+
   // 当前供应商 ID（设备级）
   currentProviderClaude: z.string().optional(),
   currentProviderClaudeDesktop: z.string().optional(),

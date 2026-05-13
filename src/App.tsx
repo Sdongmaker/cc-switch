@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Plus,
   Settings,
@@ -34,6 +34,7 @@ import type { EnvConflict } from "@/types/env";
 import { useProvidersQuery, useSettingsQuery } from "@/lib/query";
 import {
   providersApi,
+  proprietaryBootstrapApi,
   settingsApi,
   type AppId,
   type ProviderSwitchEvent,
@@ -50,6 +51,10 @@ import { useLastValidValue } from "@/hooks/useLastValidValue";
 import { extractErrorMessage } from "@/utils/errorUtils";
 import { isTextEditableTarget } from "@/utils/domUtils";
 import { cn } from "@/lib/utils";
+import {
+  isProprietaryMode,
+  isProprietarySupportedApp,
+} from "@/lib/proprietaryBootstrap";
 import {
   isWindows,
   isLinux,
@@ -177,6 +182,11 @@ function App() {
   const { data: settingsData } = useSettingsQuery();
   const useAppWindowControls =
     isLinux() && (settingsData?.useAppWindowControls ?? false);
+  const { data: bootstrapState } = useQuery({
+    queryKey: ["proprietaryBootstrap"],
+    queryFn: () => proprietaryBootstrapApi.getState(),
+  });
+  const proprietaryMode = isProprietaryMode(bootstrapState);
   const dragBarHeight = useAppWindowControls ? 32 : DEFAULT_DRAG_BAR_HEIGHT;
   const contentTopOffset = dragBarHeight + HEADER_HEIGHT;
   const visibleApps: VisibleApps = settingsData?.visibleApps ?? {
@@ -200,11 +210,36 @@ function App() {
     return "claude"; // fallback
   };
 
+  const getFirstVisibleProprietaryApp = (): AppId => {
+    if (visibleApps.claude) return "claude";
+    if (visibleApps.codex) return "codex";
+    if (visibleApps.gemini) return "gemini";
+    return "claude";
+  };
+
   useEffect(() => {
+    if (proprietaryMode && !isProprietarySupportedApp(activeApp)) {
+      setActiveApp(getFirstVisibleProprietaryApp());
+      return;
+    }
+    if (
+      proprietaryMode &&
+      isProprietarySupportedApp(activeApp) &&
+      !visibleApps[activeApp]
+    ) {
+      setActiveApp(getFirstVisibleProprietaryApp());
+      return;
+    }
     if (!visibleApps[activeApp]) {
       setActiveApp(getFirstVisibleApp());
     }
-  }, [visibleApps, activeApp]);
+  }, [visibleApps, activeApp, proprietaryMode]);
+
+  useEffect(() => {
+    if (proprietaryMode && currentView === "universal") {
+      setCurrentView("providers");
+    }
+  }, [currentView, proprietaryMode]);
 
   // Fallback from sessions view when switching to an app without session support
   useEffect(() => {
@@ -713,6 +748,10 @@ function App() {
   };
 
   const handleDuplicateProvider = async (provider: Provider) => {
+    if (proprietaryMode) {
+      return;
+    }
+
     const newSortIndex =
       provider.sortIndex !== undefined ? provider.sortIndex + 1 : undefined;
 
@@ -943,7 +982,14 @@ function App() {
             <AgentsPanel onOpenChange={() => setCurrentView("providers")} />
           );
         case "universal":
-          return (
+          return proprietaryMode ? (
+            <div className="px-6 pt-4 text-sm text-muted-foreground">
+              {t("proprietaryBootstrap.universalLocked", {
+                defaultValue:
+                  "专有版由 NewAPI 托管供应商，统一供应商管理已关闭。",
+              })}
+            </div>
+          ) : (
             <div className="px-6 pt-4">
               <UniversalProviderPanel />
             </div>
@@ -984,15 +1030,19 @@ function App() {
                       activeProviderId={activeProviderId}
                       onSwitch={switchProvider}
                       onEdit={(provider) => {
+                        if (proprietaryMode) return;
                         setEditingProvider(provider);
                       }}
-                      onDelete={(provider) =>
-                        setConfirmAction({ provider, action: "delete" })
-                      }
+                      onDelete={(provider) => {
+                        if (!proprietaryMode) {
+                          setConfirmAction({ provider, action: "delete" });
+                        }
+                      }}
                       onRemoveFromConfig={
-                        activeApp === "opencode" ||
-                        activeApp === "openclaw" ||
-                        activeApp === "hermes"
+                        !proprietaryMode &&
+                        (activeApp === "opencode" ||
+                          activeApp === "openclaw" ||
+                          activeApp === "hermes")
                           ? (provider) =>
                               setConfirmAction({ provider, action: "remove" })
                           : undefined
@@ -1006,18 +1056,28 @@ function App() {
                           : undefined
                       }
                       onDuplicate={handleDuplicateProvider}
-                      onConfigureUsage={setUsageProvider}
+                      onConfigureUsage={
+                        proprietaryMode ? undefined : setUsageProvider
+                      }
                       onOpenWebsite={handleOpenWebsite}
                       onOpenTerminal={
-                        activeApp === "claude" ? handleOpenTerminal : undefined
+                        !proprietaryMode && activeApp === "claude"
+                          ? handleOpenTerminal
+                          : undefined
                       }
-                      onCreate={() => setIsAddOpen(true)}
+                      onCreate={
+                        proprietaryMode ? undefined : () => setIsAddOpen(true)
+                      }
+                      isProprietaryLocked={proprietaryMode}
+                      bootstrapState={bootstrapState}
                       onSetAsDefault={
-                        activeApp === "openclaw"
-                          ? setAsDefaultModel
-                          : activeApp === "hermes"
-                            ? switchProvider
-                            : undefined
+                        proprietaryMode
+                          ? undefined
+                          : activeApp === "openclaw"
+                            ? setAsDefaultModel
+                            : activeApp === "hermes"
+                              ? switchProvider
+                              : undefined
                       }
                     />
                   </motion.div>
@@ -1539,13 +1599,15 @@ function App() {
                       </AnimatePresence>
                     </div>
 
-                    <Button
-                      onClick={() => setIsAddOpen(true)}
-                      size="icon"
-                      className={`ml-2 ${addActionButtonClass}`}
-                    >
-                      <Plus className="w-5 h-5" />
-                    </Button>
+                    {!proprietaryMode && (
+                      <Button
+                        onClick={() => setIsAddOpen(true)}
+                        size="icon"
+                        className={`ml-2 ${addActionButtonClass}`}
+                      >
+                        <Plus className="w-5 h-5" />
+                      </Button>
+                    )}
                   </>
                 )}
               </div>
@@ -1562,10 +1624,17 @@ function App() {
       </main>
 
       <AddProviderDialog
-        open={isAddOpen}
-        onOpenChange={setIsAddOpen}
+        open={isAddOpen && !proprietaryMode}
+        onOpenChange={(open) => {
+          if (!proprietaryMode) {
+            setIsAddOpen(open);
+          } else {
+            setIsAddOpen(false);
+          }
+        }}
         appId={activeApp}
         onSubmit={addProvider}
+        bootstrapState={bootstrapState}
       />
 
       <EditProviderDialog

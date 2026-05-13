@@ -20,6 +20,10 @@ const HERMES_WEB_OFFLINE_ERROR: &str = "hermes_web_offline";
 /// configured in config.yaml.
 #[tauri::command]
 pub fn import_hermes_providers_from_live(state: State<'_, AppState>) -> Result<usize, String> {
+    if crate::proprietary_bootstrap::is_enabled() {
+        return Ok(0);
+    }
+
     crate::services::provider::import_hermes_providers_from_live(state.inner())
         .map_err(|e| e.to_string())
 }

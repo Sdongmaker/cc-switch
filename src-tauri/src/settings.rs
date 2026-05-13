@@ -18,6 +18,24 @@ pub struct CustomEndpoint {
     pub last_used: Option<i64>,
 }
 
+/// 专有版 bootstrap 状态（设备级，不参与同步）
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ProprietaryBootstrapSettings {
+    pub install_id: String,
+    pub status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_action: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_success_at: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_attempt_at: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_base_url: Option<String>,
+}
+
 fn default_true() -> bool {
     true
 }
@@ -205,6 +223,8 @@ pub struct AppSettings {
     /// 是否在主页面启用本地代理功能（默认关闭）
     #[serde(default)]
     pub enable_local_proxy: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proprietary_bootstrap: Option<ProprietaryBootstrapSettings>,
     /// User has confirmed the local proxy first-run notice
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proxy_confirmed: Option<bool>,
@@ -322,6 +342,7 @@ impl Default for AppSettings {
             launch_on_startup: false,
             silent_startup: false,
             enable_local_proxy: false,
+            proprietary_bootstrap: None,
             proxy_confirmed: None,
             usage_confirmed: None,
             stream_check_confirmed: None,

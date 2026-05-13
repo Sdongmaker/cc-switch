@@ -43,6 +43,7 @@ interface ProviderActionsProps {
   // OpenClaw: default model
   isDefaultModel?: boolean;
   onSetAsDefault?: () => void;
+  isProprietaryLocked?: boolean;
 }
 
 export function ProviderActions({
@@ -69,6 +70,7 @@ export function ProviderActions({
   // OpenClaw: default model
   isDefaultModel = false,
   onSetAsDefault,
+  isProprietaryLocked = false,
 }: ProviderActionsProps) {
   const { t } = useTranslation();
   const iconButtonClass = "h-8 w-8 p-1";
@@ -207,6 +209,55 @@ export function ProviderActions({
   };
 
   const buttonState = getMainButtonState();
+
+  if (isProprietaryLocked) {
+    return (
+      <div className="flex items-center gap-1.5">
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled
+          className="w-[4.5rem] px-2.5 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+        >
+          <Check className="h-4 w-4" />
+          {t("proprietaryBootstrap.managed", { defaultValue: "托管" })}
+        </Button>
+
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={onTest || undefined}
+          disabled={isTesting || !onTest}
+          title={t("modelTest.testProvider", "测试模型")}
+          className={cn(
+            iconButtonClass,
+            !onTest && "opacity-40 cursor-not-allowed text-muted-foreground",
+          )}
+        >
+          {isTesting ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <TestTube2 className="h-4 w-4" />
+          )}
+        </Button>
+
+        {onOpenTerminal && (
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={onOpenTerminal}
+            title={t("provider.openTerminal", "打开终端")}
+            className={cn(
+              iconButtonClass,
+              "hover:text-emerald-600 dark:hover:text-emerald-400",
+            )}
+          >
+            <Terminal className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+    );
+  }
 
   const canDelete =
     !isReadOnly && (isOmo || isAdditiveMode ? true : !isCurrent);

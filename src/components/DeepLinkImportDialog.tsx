@@ -12,7 +12,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { proprietaryBootstrapApi } from "@/lib/api";
 import { PromptConfirmation } from "./deeplink/PromptConfirmation";
 import { McpConfirmation } from "./deeplink/McpConfirmation";
 import { SkillConfirmation } from "./deeplink/SkillConfirmation";
@@ -26,6 +27,10 @@ interface DeeplinkError {
 export function DeepLinkImportDialog() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const { data: bootstrapState } = useQuery({
+    queryKey: ["proprietaryBootstrap"],
+    queryFn: () => proprietaryBootstrapApi.getState(),
+  });
   const [request, setRequest] = useState<DeepLinkImportRequest | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
@@ -53,6 +58,19 @@ export function DeepLinkImportDialog() {
     const unlistenImport = listen<DeepLinkImportRequest>(
       "deeplink-import",
       async (event) => {
+        if (
+          bootstrapState?.enabled === true &&
+          event.payload.resource === "provider"
+        ) {
+          toast.error(
+            t("proprietaryBootstrap.deeplinkProviderLocked", {
+              defaultValue:
+                "专有版由 NewAPI 托管供应商，不能通过链接导入供应商。",
+            }),
+          );
+          return;
+        }
+
         // If config is present, merge it to get the complete configuration
         if (event.payload.config || event.payload.configUrl) {
           try {
@@ -89,7 +107,7 @@ export function DeepLinkImportDialog() {
       unlistenImport.then((fn) => fn());
       unlistenError.then((fn) => fn());
     };
-  }, [t]);
+  }, [t, bootstrapState?.enabled]);
 
   const handleImport = async () => {
     if (!request) return;

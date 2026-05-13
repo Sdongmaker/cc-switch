@@ -2,14 +2,21 @@ import { useState, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Layers } from "lucide-react";
 import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { UniversalProviderCard } from "./UniversalProviderCard";
 import { UniversalProviderFormModal } from "./UniversalProviderFormModal";
-import { universalProvidersApi } from "@/lib/api";
+import { proprietaryBootstrapApi, universalProvidersApi } from "@/lib/api";
 import type { UniversalProvider, UniversalProvidersMap } from "@/types";
+import { isProprietaryMode } from "@/lib/proprietaryBootstrap";
 
 export function UniversalProviderPanel() {
   const { t } = useTranslation();
+  const { data: bootstrapState } = useQuery({
+    queryKey: ["proprietaryBootstrap"],
+    queryFn: () => proprietaryBootstrapApi.getState(),
+  });
+  const isLocked = isProprietaryMode(bootstrapState);
 
   // 状态
   const [providers, setProviders] = useState<UniversalProvidersMap>({});
@@ -47,8 +54,12 @@ export function UniversalProviderPanel() {
   }, [t]);
 
   useEffect(() => {
+    if (isLocked) {
+      setLoading(false);
+      return;
+    }
     loadProviders();
-  }, [loadProviders]);
+  }, [isLocked, loadProviders]);
 
   // 添加/编辑供应商
   const handleSave = useCallback(
@@ -215,6 +226,16 @@ export function UniversalProviderPanel() {
   );
 
   const providerList = Object.values(providers);
+
+  if (isLocked) {
+    return (
+      <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+        {t("proprietaryBootstrap.universalLocked", {
+          defaultValue: "专有版由 NewAPI 托管供应商，统一供应商管理已关闭。",
+        })}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

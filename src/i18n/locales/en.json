@@ -2568,6 +2568,22 @@
     "suggestedDefaults": "Apply Suggested Defaults",
     "suggestedDefaultsHint": "Use this preset's recommended default model configuration"
   },
+  "proprietaryBootstrap": {
+    "universalLocked": "NewAPI manages providers in proprietary builds, so universal provider management is disabled.",
+    "managedBadge": "Managed",
+    "managed": "Managed",
+    "pendingTitle": "Bootstrapping account",
+    "pendingDescription": "NewAPI-managed providers are syncing. Please wait.",
+    "readyTitle": "Syncing providers",
+    "readyDescription": "The managed provider is ready, but the local list has not refreshed yet.",
+    "errorTitle": "Bootstrap failed",
+    "errorDescription": "Check the network and try again.",
+    "blockedTitle": "Device unavailable",
+    "blockedDescription": "Please contact support for this device state.",
+    "retry": "Retry",
+    "deeplinkProviderLocked": "NewAPI manages providers in proprietary builds, so provider imports from links are disabled.",
+    "providerCrudLocked": "NewAPI manages providers in proprietary builds, so manual provider creation is disabled."
+  },
   "subscription": {
     "title": "Subscription Quota",
     "fiveHour": "5-Hour",

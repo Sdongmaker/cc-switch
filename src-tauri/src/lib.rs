@@ -25,6 +25,7 @@ mod prompt;
 mod prompt_files;
 mod provider;
 mod provider_defaults;
+pub mod proprietary_bootstrap;
 mod proxy;
 mod services;
 mod session_manager;
@@ -48,13 +49,13 @@ pub use mcp::{
     sync_enabled_to_codex, sync_enabled_to_gemini, sync_single_server_to_claude,
     sync_single_server_to_codex, sync_single_server_to_gemini,
 };
-pub use provider::{Provider, ProviderMeta};
+pub use provider::{Provider, ProviderMeta, UniversalProvider};
 pub use services::{
     skill::{migrate_skills_to_ssot, ImportSkillSelection},
-    ConfigService, EndpointLatency, McpService, PromptService, ProviderService, ProxyService,
-    SkillService, SpeedtestService,
+    ConfigService, EndpointLatency, McpService, PromptService, ProviderService,
+    ProviderSortUpdate, ProxyService, SkillService, SpeedtestService,
 };
-pub use settings::{update_settings, AppSettings};
+pub use settings::{update_settings, AppSettings, ProprietaryBootstrapSettings};
 pub use store::AppState;
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
@@ -423,6 +424,14 @@ pub fn run() {
 
             // 设置 AppHandle 用于代理故障转移时的 UI 更新
             app_state.proxy_service.set_app_handle(app.handle().clone());
+            let proprietary_mode = crate::proprietary_bootstrap::is_enabled();
+            if proprietary_mode {
+                if let Err(err) = tauri::async_runtime::block_on(
+                    crate::proprietary_bootstrap::run_startup(&app_state),
+                ) {
+                    log::warn!("Proprietary bootstrap startup failed: {err}");
+                }
+            }
 
             // ============================================================
             // 按表独立判断的导入逻辑（各类数据独立检查，互不影响）
@@ -492,47 +501,51 @@ pub fn run() {
             let fresh_install_at_startup =
                 app_state.db.is_providers_empty().unwrap_or(false);
 
-            for app_type in
-                crate::app_config::AppType::all().filter(|t| !t.is_additive_mode())
-            {
-                if !crate::services::provider::should_import_default_config_on_startup(
-                    &app_state,
-                    &app_type,
-                )
-                .unwrap_or(false)
+            if !proprietary_mode {
+                for app_type in
+                    crate::app_config::AppType::all().filter(|t| !t.is_additive_mode())
                 {
-                    log::debug!(
-                        "○ {} already has providers; live import skipped",
-                        app_type.as_str()
-                    );
-                    continue;
+                    if !crate::services::provider::should_import_default_config_on_startup(
+                        &app_state,
+                        &app_type,
+                    )
+                    .unwrap_or(false)
+                    {
+                        log::debug!(
+                            "○ {} already has providers; live import skipped",
+                            app_type.as_str()
+                        );
+                        continue;
+                    }
+
+                    match crate::services::provider::import_default_config(
+                        &app_state,
+                        app_type.clone(),
+                    ) {
+                        Ok(true) => log::info!(
+                            "✓ Imported live config for {} as default provider",
+                            app_type.as_str()
+                        ),
+                        Ok(false) => log::debug!(
+                            "○ {} already has providers; live import skipped",
+                            app_type.as_str()
+                        ),
+                        Err(e) => log::debug!(
+                            "○ No live config to import for {}: {e}",
+                            app_type.as_str()
+                        ),
+                    }
                 }
 
-                match crate::services::provider::import_default_config(
-                    &app_state,
-                    app_type.clone(),
-                ) {
-                    Ok(true) => log::info!(
-                        "✓ Imported live config for {} as default provider",
-                        app_type.as_str()
-                    ),
-                    Ok(false) => log::debug!(
-                        "○ {} already has providers; live import skipped",
-                        app_type.as_str()
-                    ),
-                    Err(e) => log::debug!(
-                        "○ No live config to import for {}: {e}",
-                        app_type.as_str()
-                    ),
+                match app_state.db.init_default_official_providers() {
+                    Ok(count) if count > 0 => {
+                        log::info!("✓ Seeded {count} official provider(s)");
+                    }
+                    Ok(_) => {}
+                    Err(e) => log::warn!("✗ Failed to seed official providers: {e}"),
                 }
-            }
-
-            match app_state.db.init_default_official_providers() {
-                Ok(count) if count > 0 => {
-                    log::info!("✓ Seeded {count} official provider(s)");
-                }
-                Ok(_) => {}
-                Err(e) => log::warn!("✗ Failed to seed official providers: {e}"),
+            } else {
+                log::info!("Proprietary mode enabled; skipped live provider import and official provider seed");
             }
 
             // 老用户 / 已确认的路径由 `fresh_install_at_startup` 自行拦截，这里不做写入。
@@ -550,74 +563,76 @@ pub fn run() {
             //
             // 底层 read_*_config 在文件不存在时返回默认空配置，因此新装且无
             // live 文件的用户走 Ok(0) 路径，不会产生错误日志噪音。
-            match crate::services::provider::import_opencode_providers_from_live(&app_state) {
-                Ok(count) if count > 0 => {
-                    log::info!("✓ Imported {count} OpenCode provider(s) from live config");
+            if !proprietary_mode {
+                match crate::services::provider::import_opencode_providers_from_live(&app_state) {
+                    Ok(count) if count > 0 => {
+                        log::info!("✓ Imported {count} OpenCode provider(s) from live config");
+                    }
+                    Ok(_) => log::debug!("○ No new OpenCode providers to import"),
+                    Err(e) => log::warn!("✗ Failed to import OpenCode providers: {e}"),
                 }
-                Ok(_) => log::debug!("○ No new OpenCode providers to import"),
-                Err(e) => log::warn!("✗ Failed to import OpenCode providers: {e}"),
-            }
-            match crate::services::provider::import_openclaw_providers_from_live(&app_state) {
-                Ok(count) if count > 0 => {
-                    log::info!("✓ Imported {count} OpenClaw provider(s) from live config");
+                match crate::services::provider::import_openclaw_providers_from_live(&app_state) {
+                    Ok(count) if count > 0 => {
+                        log::info!("✓ Imported {count} OpenClaw provider(s) from live config");
+                    }
+                    Ok(_) => log::debug!("○ No new OpenClaw providers to import"),
+                    Err(e) => log::warn!("✗ Failed to import OpenClaw providers: {e}"),
                 }
-                Ok(_) => log::debug!("○ No new OpenClaw providers to import"),
-                Err(e) => log::warn!("✗ Failed to import OpenClaw providers: {e}"),
-            }
-            match crate::services::provider::import_hermes_providers_from_live(&app_state) {
-                Ok(count) if count > 0 => {
-                    log::info!("✓ Imported {count} Hermes provider(s) from live config");
+                match crate::services::provider::import_hermes_providers_from_live(&app_state) {
+                    Ok(count) if count > 0 => {
+                        log::info!("✓ Imported {count} Hermes provider(s) from live config");
+                    }
+                    Ok(_) => log::debug!("○ No new Hermes providers to import"),
+                    Err(e) => log::warn!("✗ Failed to import Hermes providers: {e}"),
                 }
-                Ok(_) => log::debug!("○ No new Hermes providers to import"),
-                Err(e) => log::warn!("✗ Failed to import Hermes providers: {e}"),
-            }
 
-            // 2. OMO 配置导入（当数据库中无 OMO provider 时，从本地文件导入）
-            {
-                let has_omo = app_state
-                    .db
-                    .get_all_providers("opencode")
-                    .map(|providers| providers.values().any(|p| p.category.as_deref() == Some("omo")))
-                    .unwrap_or(false);
-                if !has_omo {
-                    match crate::services::OmoService::import_from_local(&app_state, &crate::services::omo::STANDARD) {
-                        Ok(provider) => {
-                            log::info!("✓ Imported OMO config from local as provider '{}'", provider.name);
-                        }
-                        Err(AppError::OmoConfigNotFound) => {
-                            log::debug!("○ No OMO config to import");
-                        }
-                        Err(e) => {
-                            log::warn!("✗ Failed to import OMO config from local: {e}");
+                // 2. OMO 配置导入（当数据库中无 OMO provider 时，从本地文件导入）
+                {
+                    let has_omo = app_state
+                        .db
+                        .get_all_providers("opencode")
+                        .map(|providers| providers.values().any(|p| p.category.as_deref() == Some("omo")))
+                        .unwrap_or(false);
+                    if !has_omo {
+                        match crate::services::OmoService::import_from_local(&app_state, &crate::services::omo::STANDARD) {
+                            Ok(provider) => {
+                                log::info!("✓ Imported OMO config from local as provider '{}'", provider.name);
+                            }
+                            Err(AppError::OmoConfigNotFound) => {
+                                log::debug!("○ No OMO config to import");
+                            }
+                            Err(e) => {
+                                log::warn!("✗ Failed to import OMO config from local: {e}");
+                            }
                         }
                     }
                 }
-            }
 
-            // 2.3 OMO Slim config import (when no omo-slim provider in DB, import from local)
-            {
-                let has_omo_slim = app_state
-                    .db
-                    .get_all_providers("opencode")
-                    .map(|providers| {
-                        providers
-                            .values()
-                            .any(|p| p.category.as_deref() == Some("omo-slim"))
-                    })
-                    .unwrap_or(false);
-                if !has_omo_slim {
-                    match crate::services::OmoService::import_from_local(&app_state, &crate::services::omo::SLIM) {
-                        Ok(provider) => {
-                            log::info!(
-                                "✓ Imported OMO Slim config from local as provider '{}'",
-                                provider.name
-                            );
-                        }
-                        Err(AppError::OmoConfigNotFound) => {
-                            log::debug!("○ No OMO Slim config to import");
-                        }
-                        Err(e) => {
-                            log::warn!("✗ Failed to import OMO Slim config from local: {e}");
+                // 2.3 OMO Slim config import (when no omo-slim provider in DB, import from local)
+                {
+                    let has_omo_slim = app_state
+                        .db
+                        .get_all_providers("opencode")
+                        .map(|providers| {
+                            providers
+                                .values()
+                                .any(|p| p.category.as_deref() == Some("omo-slim"))
+                        })
+                        .unwrap_or(false);
+                    if !has_omo_slim {
+                        match crate::services::OmoService::import_from_local(&app_state, &crate::services::omo::SLIM) {
+                            Ok(provider) => {
+                                log::info!(
+                                    "✓ Imported OMO Slim config from local as provider '{}'",
+                                    provider.name
+                                );
+                            }
+                            Err(AppError::OmoConfigNotFound) => {
+                                log::debug!("○ No OMO Slim config to import");
+                            }
+                            Err(e) => {
+                                log::warn!("✗ Failed to import OMO Slim config from local: {e}");
+                            }
                         }
                     }
                 }
@@ -1051,6 +1066,8 @@ pub fn run() {
             commands::delete_provider,
             commands::remove_provider_from_live_config,
             commands::switch_provider,
+            commands::get_proprietary_bootstrap_state,
+            commands::retry_proprietary_bootstrap,
             commands::import_default_config,
             commands::get_claude_desktop_status,
             commands::get_claude_desktop_default_routes,
@@ -1569,6 +1586,13 @@ async fn restore_proxy_state_on_startup(state: &store::AppState) {
 }
 
 fn initialize_common_config_snippets(state: &store::AppState) {
+    if crate::proprietary_bootstrap::is_enabled() {
+        log::info!(
+            "Proprietary mode enabled; skipped automatic provider common-config extraction"
+        );
+        return;
+    }
+
     // Auto-extract common config snippets from clean live files when snippet is missing.
     // This must run before proxy takeover is restored on startup, otherwise we'd read
     // proxy-placeholder configs instead of the user's actual live settings.
