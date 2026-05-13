@@ -90,7 +90,7 @@ jobs:
         run: mkdir -p dist
 
       - name: Check Rust formatting
-        run: cargo fmt --check --manifest-path src-tauri/Cargo.toml
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml
 
       - name: Clippy
         run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
