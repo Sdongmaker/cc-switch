@@ -83,16 +83,19 @@ pub fn public_state() -> PublicState {
     from_settings(settings.proprietary_bootstrap.as_ref())
 }
 
+#[cfg(feature = "proprietary-bootstrap")]
 fn ensure_install_id(settings: &mut ProprietaryBootstrapSettings) {
     if settings.install_id.trim().is_empty() {
         settings.install_id = uuid::Uuid::new_v4().to_string();
     }
 }
 
+#[cfg(feature = "proprietary-bootstrap")]
 fn now_ts() -> i64 {
     chrono::Utc::now().timestamp()
 }
 
+#[cfg(feature = "proprietary-bootstrap")]
 fn existing_or_pending_settings() -> ProprietaryBootstrapSettings {
     let mut settings = crate::settings::get_settings()
         .proprietary_bootstrap
@@ -104,6 +107,7 @@ fn existing_or_pending_settings() -> ProprietaryBootstrapSettings {
     settings
 }
 
+#[cfg(feature = "proprietary-bootstrap")]
 fn persist_bootstrap_settings(
     settings: ProprietaryBootstrapSettings,
 ) -> Result<PublicState, String> {
@@ -125,6 +129,7 @@ fn has_cached_managed_provider(state: &AppState) -> bool {
     })
 }
 
+#[cfg_attr(not(feature = "proprietary-bootstrap"), allow(unused_variables))]
 pub async fn run_startup(state: &AppState) -> Result<(), String> {
     if !is_enabled() {
         return Ok(());

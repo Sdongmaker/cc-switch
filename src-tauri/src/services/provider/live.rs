@@ -8,13 +8,14 @@ use serde_json::{json, Value};
 use toml_edit::{DocumentMut, Item, TableLike};
 
 use crate::app_config::AppType;
+#[cfg(feature = "proprietary-bootstrap")]
+use crate::codex_config::write_codex_live_atomic;
 use crate::codex_config::{
-    get_codex_auth_path, get_codex_config_path, write_codex_live_atomic,
-    write_codex_live_atomic_with_stable_provider,
+    get_codex_auth_path, get_codex_config_path, write_codex_live_atomic_with_stable_provider,
 };
-use crate::config::{
-    delete_file, get_claude_settings_path, read_json_file, write_json_file, write_text_file,
-};
+#[cfg(feature = "proprietary-bootstrap")]
+use crate::config::write_text_file;
+use crate::config::{delete_file, get_claude_settings_path, read_json_file, write_json_file};
 use crate::database::Database;
 use crate::error::AppError;
 use crate::provider::Provider;
@@ -1061,6 +1062,7 @@ pub fn read_live_settings(app_type: AppType) -> Result<Value, AppError> {
     }
 }
 
+#[cfg(feature = "proprietary-bootstrap")]
 pub(crate) fn restore_live_snapshot(
     app_type: &AppType,
     snapshot: Option<&Value>,
