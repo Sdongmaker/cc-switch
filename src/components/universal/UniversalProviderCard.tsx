@@ -50,7 +50,9 @@ export function UniversalProviderCard({
         <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
           {isManaged && (
             <span className="mr-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
-              {t("proprietaryBootstrap.managedBadge", { defaultValue: "已托管" })}
+              {t("proprietaryBootstrap.managedBadge", {
+                defaultValue: "已托管",
+              })}
             </span>
           )}
           <Button
@@ -69,7 +71,9 @@ export function UniversalProviderCard({
                 size="icon"
                 className="h-8 w-8"
                 onClick={() => onDuplicate(provider)}
-                title={t("universalProvider.duplicate", { defaultValue: "复制" })}
+                title={t("universalProvider.duplicate", {
+                  defaultValue: "复制",
+                })}
               >
                 <Copy className="h-4 w-4" />
               </Button>

@@ -482,7 +482,8 @@ export function ProviderList({
                     : isProviderDefaultModel(provider.id)
                 }
                 onSetAsDefault={
-                  (!isProprietaryLocked || !isManagedProviderId(provider.id)) && onSetAsDefault
+                  (!isProprietaryLocked || !isManagedProviderId(provider.id)) &&
+                  onSetAsDefault
                     ? () => onSetAsDefault(provider)
                     : undefined
                 }

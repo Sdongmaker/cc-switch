@@ -1060,9 +1060,7 @@ function App() {
                       onConfigureUsage={setUsageProvider}
                       onOpenWebsite={handleOpenWebsite}
                       onOpenTerminal={
-                        activeApp === "claude"
-                          ? handleOpenTerminal
-                          : undefined
+                        activeApp === "claude" ? handleOpenTerminal : undefined
                       }
                       onCreate={() => setIsAddOpen(true)}
                       isProprietaryLocked={proprietaryMode}

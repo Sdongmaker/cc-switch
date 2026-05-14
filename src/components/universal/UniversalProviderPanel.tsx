@@ -299,9 +299,7 @@ export function UniversalProviderPanel() {
             <UniversalProviderCard
               key={provider.id}
               provider={provider}
-              isManaged={
-                isLocked && isManagedUniversalProvider(provider)
-              }
+              isManaged={isLocked && isManagedUniversalProvider(provider)}
               onEdit={handleEdit}
               onDelete={handleDeleteClick}
               onSync={handleSyncClick}

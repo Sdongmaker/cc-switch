@@ -1,9 +1,11 @@
 use crate::app_config::AppType;
 use crate::error::AppError;
+#[cfg(feature = "proprietary-bootstrap")]
 use crate::provider::Provider;
 
 pub const MANAGED_PROVIDER_ID: &str = "managed-newapi";
-pub const MANAGED_PROVIDER_TYPE: &str = "managed_newapi";
+#[cfg(feature = "proprietary-bootstrap")]
+pub(crate) const MANAGED_PROVIDER_TYPE: &str = "managed_newapi";
 
 #[cfg(feature = "proprietary-bootstrap")]
 pub(crate) fn supported_apps() -> [AppType; 3] {
@@ -22,6 +24,7 @@ pub(crate) fn is_managed_provider_id(id: &str) -> bool {
     id == MANAGED_PROVIDER_ID
 }
 
+#[cfg(feature = "proprietary-bootstrap")]
 pub(crate) fn is_managed_provider(provider: &Provider) -> bool {
     is_managed_provider_id(&provider.id)
         && provider.category.as_deref() == Some("managed")
