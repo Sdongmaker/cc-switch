@@ -18,6 +18,12 @@ pub async fn retry_proprietary_bootstrap(
 }
 
 #[tauri::command]
+pub async fn reset_proprietary_bootstrap(
+) -> Result<crate::proprietary_bootstrap::PublicState, String> {
+    crate::proprietary_bootstrap::reset_bootstrap_state()
+}
+
+#[tauri::command]
 #[cfg(feature = "proprietary-bootstrap")]
 pub async fn claim_account_link() -> Result<ClaimLinkPublicData, String> {
     crate::proprietary_bootstrap::request_claim_link().await

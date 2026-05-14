@@ -292,6 +292,25 @@ export function ProviderList({
     },
   });
 
+  const resetBootstrapMutation = useMutation({
+    mutationFn: () => proprietaryBootstrapApi.reset(),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["proprietaryBootstrap"],
+      });
+      await queryClient.invalidateQueries({ queryKey: ["providers", appId] });
+      toast.success(
+        t("proprietaryBootstrap.resetSuccess", {
+          defaultValue: "注册状态已重置，正在重新注册...",
+        }),
+      );
+      retryBootstrapMutation.mutate();
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
@@ -414,6 +433,12 @@ export function ProviderList({
             : undefined
         }
         isRetryingBootstrap={retryBootstrapMutation.isPending}
+        onResetBootstrap={
+          isProprietaryLocked
+            ? () => resetBootstrapMutation.mutate()
+            : undefined
+        }
+        isResettingBootstrap={resetBootstrapMutation.isPending}
       />
     );
   }

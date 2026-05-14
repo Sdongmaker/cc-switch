@@ -1,4 +1,4 @@
-import { Download, Loader2, RefreshCw, Users } from "lucide-react";
+import { Download, Loader2, RefreshCw, Trash2, Users } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import type { AppId } from "@/lib/api/types";
@@ -11,6 +11,8 @@ interface ProviderEmptyStateProps {
   bootstrapState?: ProprietaryBootstrapState;
   onRetryBootstrap?: () => void;
   isRetryingBootstrap?: boolean;
+  onResetBootstrap?: () => void;
+  isResettingBootstrap?: boolean;
 }
 
 export function ProviderEmptyState({
@@ -20,6 +22,8 @@ export function ProviderEmptyState({
   bootstrapState,
   onRetryBootstrap,
   isRetryingBootstrap = false,
+  onResetBootstrap,
+  isResettingBootstrap = false,
 }: ProviderEmptyStateProps) {
   const { t } = useTranslation();
   const isProprietary = bootstrapState?.enabled === true;
@@ -60,7 +64,8 @@ export function ProviderEmptyState({
             })
           : isBlocked
             ? t("proprietaryBootstrap.blockedDescription", {
-                defaultValue: "请联系支持处理当前设备状态。",
+                defaultValue:
+                  "当前设备已被服务端限制。你可以尝试重试或重置本地状态后重新注册。",
               })
             : t("proprietaryBootstrap.pendingDescription", {
                 defaultValue: "NewAPI 托管供应商正在同步，请稍候。",
@@ -80,10 +85,10 @@ export function ProviderEmptyState({
           {description}
         </p>
         <div className="mt-6 flex flex-col gap-2">
-          {!isBlocked && onRetryBootstrap && (
+          {onRetryBootstrap && (
             <Button
               onClick={onRetryBootstrap}
-              disabled={isPending || isRetryingBootstrap}
+              disabled={isPending || isRetryingBootstrap || isResettingBootstrap}
             >
               {isRetryingBootstrap ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -93,9 +98,27 @@ export function ProviderEmptyState({
               {t("proprietaryBootstrap.retry", { defaultValue: "重试" })}
             </Button>
           )}
+          {(isBlocked || status === "error") && onResetBootstrap && (
+            <Button
+              variant="outline"
+              onClick={onResetBootstrap}
+              disabled={isRetryingBootstrap || isResettingBootstrap}
+            >
+              {isResettingBootstrap ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="mr-2 h-4 w-4" />
+              )}
+              {t("proprietaryBootstrap.reset", {
+                defaultValue: "重置注册状态",
+              })}
+            </Button>
+          )}
           {onCreate && (
             <Button
-              variant={onRetryBootstrap && !isBlocked ? "outline" : "default"}
+              variant={
+                (onRetryBootstrap || onResetBootstrap) ? "outline" : "default"
+              }
               onClick={onCreate}
             >
               {t("provider.addProvider")}

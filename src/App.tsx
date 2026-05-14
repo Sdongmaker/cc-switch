@@ -1427,6 +1427,7 @@ function App() {
                       onSwitch={setActiveApp}
                       visibleApps={visibleApps}
                       compact={isToolbarCompact}
+                      proprietaryMode={proprietaryMode}
                     />
 
                     <div className="flex items-center gap-1 p-1 bg-muted rounded-xl">

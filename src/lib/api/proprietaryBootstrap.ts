@@ -27,4 +27,8 @@ export const proprietaryBootstrapApi = {
   async claimAccountLink(): Promise<ClaimLinkData> {
     return await invoke("claim_account_link");
   },
+
+  async reset(): Promise<ProprietaryBootstrapState> {
+    return await invoke("reset_proprietary_bootstrap");
+  },
 };

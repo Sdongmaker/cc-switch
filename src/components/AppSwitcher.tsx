@@ -8,6 +8,7 @@ interface AppSwitcherProps {
   onSwitch: (app: AppId) => void;
   visibleApps?: VisibleApps;
   compact?: boolean;
+  proprietaryMode?: boolean;
 }
 
 const ALL_APPS: AppId[] = [
@@ -19,6 +20,9 @@ const ALL_APPS: AppId[] = [
   "openclaw",
   "hermes",
 ];
+
+const PROPRIETARY_APPS: AppId[] = ["claude", "codex", "gemini"];
+
 const STORAGE_KEY = "cc-switch-last-app";
 
 export function AppSwitcher({
@@ -26,6 +30,7 @@ export function AppSwitcher({
   onSwitch,
   visibleApps,
   compact,
+  proprietaryMode = false,
 }: AppSwitcherProps) {
   const handleSwitch = (app: AppId) => {
     if (app === activeApp) return;
@@ -53,7 +58,9 @@ export function AppSwitcher({
   };
 
   // Filter apps based on visibility settings (default all visible)
+  // In proprietary mode, only show supported apps
   const appsToShow = ALL_APPS.filter((app) => {
+    if (proprietaryMode && !PROPRIETARY_APPS.includes(app)) return false;
     if (!visibleApps) return true;
     return visibleApps[app];
   });

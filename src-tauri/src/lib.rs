@@ -1072,6 +1072,7 @@ pub fn run() {
             commands::switch_provider,
             commands::get_proprietary_bootstrap_state,
             commands::retry_proprietary_bootstrap,
+            commands::reset_proprietary_bootstrap,
             commands::import_default_config,
             commands::get_claude_desktop_status,
             commands::get_claude_desktop_default_routes,

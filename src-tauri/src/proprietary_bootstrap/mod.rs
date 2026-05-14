@@ -287,6 +287,13 @@ pub async fn retry_startup(state: &AppState) -> Result<PublicState, String> {
     Ok(public_state())
 }
 
+pub fn reset_bootstrap_state() -> Result<PublicState, String> {
+    let mut app_settings = crate::settings::get_settings();
+    app_settings.proprietary_bootstrap = None;
+    crate::settings::update_settings(app_settings).map_err(|err| err.to_string())?;
+    Ok(public_state())
+}
+
 #[cfg(all(feature = "proprietary-bootstrap", feature = "test-hooks"))]
 pub use client::{sign, signature_string, summarize_error};
 
