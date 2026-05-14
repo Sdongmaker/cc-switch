@@ -4,12 +4,15 @@ import { Badge } from "@/components/ui/badge";
 import { CodexIcon } from "@/components/BrandIcons";
 import { CopilotAuthSection } from "@/components/providers/forms/CopilotAuthSection";
 import { CodexOAuthSection } from "@/components/providers/forms/CodexOAuthSection";
+import { ManagedAccountSection } from "@/components/settings/ManagedAccountSection";
 
 export function AuthCenterPanel() {
   const { t } = useTranslation();
 
   return (
     <div className="space-y-6">
+      <ManagedAccountSection />
+
       <section className="rounded-xl border border-border/60 bg-card/60 p-6">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-2">

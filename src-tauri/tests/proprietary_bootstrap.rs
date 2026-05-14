@@ -18,8 +18,10 @@ use support::{ensure_test_home, reset_test_fs, test_mutex};
 
 #[cfg(feature = "proprietary-bootstrap")]
 use cc_switch_lib::{
-    import_provider_from_deeplink, parse_deeplink_url, AppState, AppType, Database, Provider,
-    ProviderMeta, ProviderService, ProviderSortUpdate, UniversalProvider,
+    get_claude_settings_path, get_codex_auth_path, get_codex_config_path,
+    import_provider_from_deeplink, parse_deeplink_url, read_json_file, update_settings,
+    AppSettings, AppState, AppType, Database, Provider, ProviderMeta, ProviderService,
+    ProviderSortUpdate, UniversalProvider,
 };
 
 #[cfg(all(feature = "proprietary-bootstrap", feature = "test-hooks"))]
@@ -267,12 +269,96 @@ fn provider_json_contains_token(provider: &Provider, token: &str) -> bool {
         .contains(token)
 }
 
-#[cfg(feature = "test-hooks")]
+#[cfg(all(feature = "proprietary-bootstrap", feature = "test-hooks"))]
+fn provider_with_env(id: &str, name: &str, token: &str) -> Provider {
+    Provider::with_id(
+        id.to_string(),
+        name.to_string(),
+        json!({
+            "env": {
+                "ANTHROPIC_BASE_URL": "https://old.example.com",
+                "ANTHROPIC_AUTH_TOKEN": token
+            }
+        }),
+        Some("https://old.example.com".to_string()),
+    )
+}
+
+#[cfg(all(feature = "proprietary-bootstrap", feature = "test-hooks"))]
+fn seed_existing_claude_state(state: &AppState, home: &Path) {
+    let provider = provider_with_env("old-claude", "Old Claude", "sk-old-claude");
+    state
+        .db
+        .save_provider(AppType::Claude.as_str(), &provider)
+        .expect("seed old claude provider");
+    state
+        .db
+        .set_current_provider(AppType::Claude.as_str(), "old-claude")
+        .expect("set old claude current provider");
+    let settings = AppSettings {
+        current_provider_claude: Some("old-claude".to_string()),
+        ..AppSettings::default()
+    };
+    update_settings(settings).expect("set old claude settings current provider");
+
+    let claude_path = get_claude_settings_path();
+    std::fs::create_dir_all(claude_path.parent().expect("claude settings parent"))
+        .expect("create claude settings dir");
+    std::fs::write(
+        &claude_path,
+        r#"{"env":{"ANTHROPIC_AUTH_TOKEN":"sk-old-claude","ANTHROPIC_BASE_URL":"https://old.example.com"}}"#,
+    )
+    .expect("seed claude live config");
+
+    assert!(
+        home.join(".claude").join("settings.json").exists(),
+        "seeded Claude live config should exist"
+    );
+}
+
+#[cfg(all(feature = "proprietary-bootstrap", feature = "test-hooks"))]
+fn seed_invalid_codex_live_config(home: &Path) {
+    let codex_dir = home.join(".codex");
+    std::fs::create_dir_all(&codex_dir).expect("create codex dir");
+    std::fs::write(codex_dir.join("auth.json"), r#"{"OPENAI_API_KEY":"sk-old-codex"}"#)
+        .expect("seed codex auth");
+    std::fs::write(codex_dir.join("config.toml"), "model_provider = [")
+        .expect("seed invalid codex config");
+}
+
+#[cfg(all(feature = "proprietary-bootstrap", feature = "test-hooks"))]
+fn assert_no_managed_provider_rows(state: &AppState) {
+    for app in [AppType::Claude, AppType::Codex, AppType::Gemini] {
+        assert!(
+            state
+                .db
+                .get_provider_by_id("managed-newapi", app.as_str())
+                .expect("read managed provider")
+                .is_none(),
+            "{} should not keep a managed provider after failed bootstrap",
+            app.as_str()
+        );
+    }
+}
+
+#[cfg(all(feature = "proprietary-bootstrap", feature = "test-hooks"))]
+fn settings_json_current_provider(home: &Path, key: &str) -> Option<String> {
+    read_settings_json(home)
+        .get(key)
+        .and_then(|value| value.as_str())
+        .map(str::to_string)
+}
+
+#[cfg(all(feature = "proprietary-bootstrap", feature = "test-hooks"))]
 #[test]
 fn signature_string_matches_newapi_contract() {
     let raw_body = br#"{"install_id":"i"}"#;
-    let text =
-        cc_switch_lib::proprietary_bootstrap::signature_string(1760000000, "nonce-1", raw_body);
+    let text = cc_switch_lib::proprietary_bootstrap::signature_string(
+        1760000000,
+        "nonce-1",
+        raw_body,
+        "/api/bootstrap/cc-switch",
+    );
     assert_eq!(
         text,
         "POST\n/api/bootstrap/cc-switch\n1760000000\nnonce-1\n91c3ccf8292743b03ed71017029d30dcb35aee5c026f912cd12c40f1fe85f816"
@@ -284,7 +370,7 @@ fn signature_string_matches_newapi_contract() {
     );
 }
 
-#[cfg(feature = "test-hooks")]
+#[cfg(all(feature = "proprietary-bootstrap", feature = "test-hooks"))]
 #[test]
 fn bootstrap_error_summary_redacts_api_tokens() {
     let summary = cc_switch_lib::proprietary_bootstrap::summarize_error(
@@ -456,8 +542,12 @@ async fn bootstrap_success_writes_managed_newapi_for_core_apps() {
         .get("x-ccs-nonce")
         .and_then(|value| value.to_str().ok())
         .expect("nonce header");
-    let expected_signature_text =
-        cc_switch_lib::proprietary_bootstrap::signature_string(timestamp, nonce, &observed.body);
+    let expected_signature_text = cc_switch_lib::proprietary_bootstrap::signature_string(
+        timestamp,
+        nonce,
+        &observed.body,
+        "/api/bootstrap/cc-switch",
+    );
     let expected_signature =
         cc_switch_lib::proprietary_bootstrap::sign("secret", expected_signature_text.as_bytes());
     assert_eq!(
@@ -553,6 +643,166 @@ async fn token_rotated_overwrites_existing_api_key() {
         .last_error
         .unwrap_or_default()
         .contains("sk-new"));
+
+    server.shutdown().await;
+}
+
+#[cfg(all(feature = "proprietary-bootstrap", feature = "test-hooks"))]
+#[tokio::test(flavor = "current_thread")]
+async fn bootstrap_upsert_rolls_back_prior_apps_when_later_live_read_fails() {
+    let _guard = test_mutex().lock().expect("acquire test mutex");
+    reset_test_fs();
+    let home = ensure_test_home();
+    let state = test_state();
+    seed_existing_claude_state(&state, home);
+    seed_invalid_codex_live_config(home);
+
+    let server = BootstrapTestServer::start(
+        StatusCode::OK,
+        bootstrap_response("created", "https://api.example.com", "sk-created"),
+    )
+    .await;
+    let _env = EnvGuard::bootstrap(&server.base_url);
+
+    let public_state = cc_switch_lib::proprietary_bootstrap::run_attempt_for_test(&state)
+        .await
+        .expect("failed provider upsert should be recorded as retryable state");
+
+    assert_eq!(public_state.status.as_deref(), Some("error"));
+    assert!(public_state
+        .last_error
+        .as_deref()
+        .unwrap_or_default()
+        .contains("provider upsert failed"));
+    assert_no_managed_provider_rows(&state);
+    assert_eq!(
+        state
+            .db
+            .get_current_provider(AppType::Claude.as_str())
+            .expect("read db claude current")
+            .as_deref(),
+        Some("old-claude")
+    );
+    assert_eq!(
+        settings_json_current_provider(home, "currentProviderClaude").as_deref(),
+        Some("old-claude")
+    );
+
+    let old_claude = state
+        .db
+        .get_provider_by_id("old-claude", AppType::Claude.as_str())
+        .expect("read old claude provider")
+        .expect("old claude provider should remain");
+    assert!(provider_json_contains_token(&old_claude, "sk-old-claude"));
+    let claude_live: Value = read_json_file(&get_claude_settings_path()).expect("read claude live");
+    assert_eq!(
+        claude_live
+            .pointer("/env/ANTHROPIC_AUTH_TOKEN")
+            .and_then(|value| value.as_str()),
+        Some("sk-old-claude")
+    );
+
+    server.shutdown().await;
+}
+
+#[cfg(all(feature = "proprietary-bootstrap", feature = "test-hooks"))]
+#[tokio::test(flavor = "current_thread")]
+async fn bootstrap_upsert_rolls_back_db_when_codex_live_write_fails() {
+    let _guard = test_mutex().lock().expect("acquire test mutex");
+    reset_test_fs();
+    let home = ensure_test_home();
+    let state = test_state();
+    seed_existing_claude_state(&state, home);
+
+    let codex_config_path = get_codex_config_path();
+    std::fs::create_dir_all(codex_config_path.parent().expect("codex config parent"))
+        .expect("create codex dir");
+    std::fs::create_dir_all(&codex_config_path)
+        .expect("create directory where codex config.toml should be");
+
+    let server = BootstrapTestServer::start(
+        StatusCode::OK,
+        bootstrap_response("created", "https://api.example.com", "sk-created"),
+    )
+    .await;
+    let _env = EnvGuard::bootstrap(&server.base_url);
+
+    let public_state = cc_switch_lib::proprietary_bootstrap::run_attempt_for_test(&state)
+        .await
+        .expect("failed provider upsert should be recorded as retryable state");
+
+    assert_eq!(public_state.status.as_deref(), Some("error"));
+    assert_no_managed_provider_rows(&state);
+    assert_eq!(
+        settings_json_current_provider(home, "currentProviderClaude").as_deref(),
+        Some("old-claude")
+    );
+    let claude_live: Value = read_json_file(&get_claude_settings_path()).expect("read claude live");
+    assert_eq!(
+        claude_live
+            .pointer("/env/ANTHROPIC_AUTH_TOKEN")
+            .and_then(|value| value.as_str()),
+        Some("sk-old-claude")
+    );
+    assert!(
+        !get_codex_auth_path().exists(),
+        "failed codex live write should not leave a new auth.json behind"
+    );
+
+    server.shutdown().await;
+}
+
+#[cfg(all(feature = "proprietary-bootstrap", feature = "test-hooks"))]
+#[tokio::test(flavor = "current_thread")]
+async fn bootstrap_retry_recovers_after_rolled_back_partial_upsert() {
+    let _guard = test_mutex().lock().expect("acquire test mutex");
+    reset_test_fs();
+    let home = ensure_test_home();
+    let state = test_state();
+    seed_existing_claude_state(&state, home);
+    seed_invalid_codex_live_config(home);
+
+    let server = BootstrapTestServer::start(
+        StatusCode::OK,
+        bootstrap_response("created", "https://api.example.com", "sk-created"),
+    )
+    .await;
+    let _env = EnvGuard::bootstrap(&server.base_url);
+
+    let failed_state = cc_switch_lib::proprietary_bootstrap::run_attempt_for_test(&state)
+        .await
+        .expect("failed provider upsert should be recorded as retryable state");
+    assert_eq!(failed_state.status.as_deref(), Some("error"));
+
+    std::fs::write(
+        get_codex_config_path(),
+        r#"model_provider = "old"
+model = "old-model"
+
+[model_providers.old]
+name = "Old"
+base_url = "https://old.example.com/v1"
+wire_api = "responses"
+"#,
+    )
+    .expect("repair codex config");
+    let ready_state = cc_switch_lib::proprietary_bootstrap::run_attempt_for_test(&state)
+        .await
+        .expect("retry should succeed after live config is repaired");
+
+    assert_eq!(ready_state.status.as_deref(), Some("ready"));
+    for app in [AppType::Claude, AppType::Codex, AppType::Gemini] {
+        let provider = state
+            .db
+            .get_provider_by_id("managed-newapi", app.as_str())
+            .expect("read managed provider")
+            .expect("managed provider should exist after retry");
+        assert!(provider_json_contains_token(&provider, "sk-created"));
+        assert_eq!(
+            ProviderService::current(&state, app.clone()).expect("read current provider"),
+            "managed-newapi"
+        );
+    }
 
     server.shutdown().await;
 }

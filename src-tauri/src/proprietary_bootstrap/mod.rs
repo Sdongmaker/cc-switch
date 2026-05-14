@@ -7,9 +7,12 @@ use std::time::Duration;
 use crate::settings::ProprietaryBootstrapSettings;
 use crate::store::AppState;
 
+#[cfg(feature = "proprietary-bootstrap")]
 mod client;
+#[cfg(feature = "proprietary-bootstrap")]
 mod fingerprint;
 pub(crate) mod guard;
+#[cfg(feature = "proprietary-bootstrap")]
 mod provider;
 
 #[cfg(feature = "proprietary-bootstrap")]
@@ -34,6 +37,14 @@ pub struct PublicState {
     pub last_error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider_base_url: Option<String>,
+}
+
+#[cfg(feature = "proprietary-bootstrap")]
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaimLinkPublicData {
+    pub claim_url: String,
+    pub expires_at: i64,
 }
 
 pub fn is_enabled() -> bool {
@@ -102,6 +113,7 @@ fn persist_bootstrap_settings(
     Ok(public_state())
 }
 
+#[cfg(feature = "proprietary-bootstrap")]
 fn has_cached_managed_provider(state: &AppState) -> bool {
     guard::supported_apps().into_iter().any(|app_type| {
         state
@@ -228,12 +240,28 @@ async fn run_once(
     client::send(&config, install_id).await
 }
 
+#[cfg(feature = "proprietary-bootstrap")]
+pub async fn request_claim_link() -> Result<ClaimLinkPublicData, String> {
+    let settings = existing_or_pending_settings();
+    let data = client::send_claim_link(
+        &client::load_config()?,
+        settings.install_id.clone(),
+        Some("/console/topup".to_string()),
+    )
+    .await?;
+
+    Ok(ClaimLinkPublicData {
+        claim_url: data.claim_url,
+        expires_at: data.expires_at,
+    })
+}
+
 pub async fn retry_startup(state: &AppState) -> Result<PublicState, String> {
     run_startup(state).await?;
     Ok(public_state())
 }
 
-#[cfg(feature = "test-hooks")]
+#[cfg(all(feature = "proprietary-bootstrap", feature = "test-hooks"))]
 pub use client::{sign, signature_string, summarize_error};
 
 #[cfg(all(feature = "proprietary-bootstrap", feature = "test-hooks"))]

@@ -299,6 +299,13 @@
       "copilotDescription": "GitHub Copilot アカウントを管理します",
       "codexOauthDescription": "ChatGPT アカウントを管理します"
     },
+    "managedAccount": {
+      "title": "アカウント管理",
+      "description": "NewAPI アカウントの管理、チャージ、ログイン",
+      "button": "アカウント管理 / チャージ",
+      "claimError": "認証リンクの取得に失敗しました。後でもう一度お試しください",
+      "loading": "認証リンクを生成中..."
+    },
     "advanced": {
       "configDir": {
         "title": "設定ディレクトリ",

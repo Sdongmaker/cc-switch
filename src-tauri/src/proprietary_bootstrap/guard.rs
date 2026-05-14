@@ -5,6 +5,7 @@ use crate::provider::Provider;
 pub const MANAGED_PROVIDER_ID: &str = "managed-newapi";
 pub const MANAGED_PROVIDER_TYPE: &str = "managed_newapi";
 
+#[cfg(feature = "proprietary-bootstrap")]
 pub(crate) fn supported_apps() -> [AppType; 3] {
     [AppType::Claude, AppType::Codex, AppType::Gemini]
 }

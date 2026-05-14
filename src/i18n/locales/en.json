@@ -299,6 +299,13 @@
       "copilotDescription": "Manage GitHub Copilot accounts",
       "codexOauthDescription": "Manage ChatGPT accounts"
     },
+    "managedAccount": {
+      "title": "Account Management",
+      "description": "Manage your NewAPI account, top up, or log in",
+      "button": "Manage Account / Top Up",
+      "claimError": "Failed to get claim link, please try again later",
+      "loading": "Generating claim link..."
+    },
     "advanced": {
       "configDir": {
         "title": "Configuration Directory",

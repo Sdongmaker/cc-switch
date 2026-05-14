@@ -299,6 +299,13 @@
       "copilotDescription": "管理 GitHub Copilot 账号",
       "codexOauthDescription": "管理 ChatGPT 账号"
     },
+    "managedAccount": {
+      "title": "账号管理",
+      "description": "管理 NewAPI 账号、充值或登录",
+      "button": "管理账号 / 充值",
+      "claimError": "获取认领链接失败，请稍后重试",
+      "loading": "正在生成认领链接..."
+    },
     "advanced": {
       "configDir": {
         "title": "配置文件目录",

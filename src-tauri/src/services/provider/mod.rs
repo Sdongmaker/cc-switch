@@ -26,7 +26,7 @@ pub use live::read_live_settings;
 pub(crate) use live::sanitize_claude_settings_for_live;
 pub(crate) use live::{
     build_effective_settings_with_common_config, normalize_provider_common_config_for_storage,
-    provider_exists_in_live_config, strip_common_config_from_live_settings,
+    provider_exists_in_live_config, restore_live_snapshot, strip_common_config_from_live_settings,
     sync_current_provider_for_app_to_live, write_live_with_common_config,
 };
 
@@ -1747,31 +1747,6 @@ impl ProviderService {
         }
 
         sync_current_provider_for_app_to_live(state, &app_type)
-    }
-
-    pub(crate) fn upsert_managed_newapi_provider(
-        state: &AppState,
-        app_type: AppType,
-        provider: Provider,
-    ) -> Result<(), AppError> {
-        if !crate::proprietary_bootstrap::guard::is_supported_app(&app_type) {
-            return Err(AppError::Message(format!(
-                "App {} does not support managed NewAPI bootstrap",
-                app_type.as_str()
-            )));
-        }
-        if provider.id != crate::proprietary_bootstrap::guard::MANAGED_PROVIDER_ID {
-            return Err(AppError::Message(format!(
-                "Managed NewAPI provider id must be {}",
-                crate::proprietary_bootstrap::guard::MANAGED_PROVIDER_ID
-            )));
-        }
-
-        state.db.save_provider(app_type.as_str(), &provider)?;
-        crate::settings::set_current_provider(&app_type, Some(provider.id.as_str()))?;
-        state.db.set_current_provider(app_type.as_str(), &provider.id)?;
-        write_live_with_common_config(state.db.as_ref(), &app_type, &provider)?;
-        Ok(())
     }
 
     pub fn migrate_legacy_common_config_usage(

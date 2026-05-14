@@ -426,11 +426,15 @@ pub fn run() {
             app_state.proxy_service.set_app_handle(app.handle().clone());
             let proprietary_mode = crate::proprietary_bootstrap::is_enabled();
             if proprietary_mode {
-                if let Err(err) = tauri::async_runtime::block_on(
-                    crate::proprietary_bootstrap::run_startup(&app_state),
-                ) {
-                    log::warn!("Proprietary bootstrap startup failed: {err}");
-                }
+                let bootstrap_db = app_state.db.clone();
+                tauri::async_runtime::spawn(async move {
+                    let bootstrap_state = AppState::new(bootstrap_db);
+                    if let Err(err) =
+                        crate::proprietary_bootstrap::run_startup(&bootstrap_state).await
+                    {
+                        log::warn!("Proprietary bootstrap startup failed: {err}");
+                    }
+                });
             }
 
             // ============================================================

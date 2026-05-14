@@ -3,7 +3,7 @@ use serde_json::json;
 use crate::app_config::AppType;
 use crate::error::AppError;
 use crate::provider::{Provider, ProviderMeta};
-use crate::services::ProviderService;
+use crate::services::provider::{restore_live_snapshot, write_live_with_common_config};
 use crate::store::AppState;
 
 use super::client::BootstrapProvider;
@@ -28,11 +28,171 @@ pub(crate) fn upsert_managed_provider(
     let codex = build_codex_provider(provider, &base_url);
     let gemini = build_gemini_provider(provider, &base_url);
 
-    ProviderService::upsert_managed_newapi_provider(state, AppType::Claude, claude)?;
-    ProviderService::upsert_managed_newapi_provider(state, AppType::Codex, codex)?;
-    ProviderService::upsert_managed_newapi_provider(state, AppType::Gemini, gemini)?;
+    upsert_managed_provider_set(
+        state,
+        vec![
+            ManagedProviderWrite::new(AppType::Claude, claude),
+            ManagedProviderWrite::new(AppType::Codex, codex),
+            ManagedProviderWrite::new(AppType::Gemini, gemini),
+        ],
+    )
+}
+
+struct ManagedProviderWrite {
+    app_type: AppType,
+    provider: Provider,
+}
+
+impl ManagedProviderWrite {
+    fn new(app_type: AppType, provider: Provider) -> Self {
+        Self { app_type, provider }
+    }
+}
+
+#[derive(Clone)]
+struct ProviderSnapshot {
+    app_type: AppType,
+    previous_provider: Option<Provider>,
+    previous_db_current: Option<String>,
+    previous_settings_current: Option<String>,
+    previous_live: Option<serde_json::Value>,
+}
+
+fn upsert_managed_provider_set(
+    state: &AppState,
+    writes: Vec<ManagedProviderWrite>,
+) -> Result<(), AppError> {
+    let mut applied = Vec::new();
+
+    for write in writes {
+        let snapshot = match snapshot_app_state(state, &write.app_type) {
+            Ok(snapshot) => snapshot,
+            Err(err) => {
+                let rollback_error = rollback_applied(state, applied);
+                return Err(provider_upsert_error(err, rollback_error));
+            }
+        };
+        match upsert_managed_provider_for_app(state, &write.app_type, &write.provider) {
+            Ok(()) => applied.push(snapshot),
+            Err(err) => {
+                applied.push(snapshot);
+                let rollback_error = rollback_applied(state, applied);
+                return Err(provider_upsert_error(err, rollback_error));
+            }
+        }
+    }
 
     Ok(())
+}
+
+fn snapshot_app_state(state: &AppState, app_type: &AppType) -> Result<ProviderSnapshot, AppError> {
+    if !super::guard::is_supported_app(app_type) {
+        return Err(AppError::Message(format!(
+            "App {} does not support managed NewAPI bootstrap",
+            app_type.as_str()
+        )));
+    }
+
+    let previous_live = match crate::services::ProviderService::read_live_settings(app_type.clone())
+    {
+        Ok(value) => Some(value),
+        Err(err) if live_missing_is_snapshot_none(&err) => None,
+        Err(err) => return Err(err),
+    };
+
+    Ok(ProviderSnapshot {
+        app_type: app_type.clone(),
+        previous_provider: state.db.get_provider_by_id(provider_id(), app_type.as_str())?,
+        previous_db_current: state.db.get_current_provider(app_type.as_str())?,
+        previous_settings_current: crate::settings::get_current_provider(app_type),
+        previous_live,
+    })
+}
+
+fn upsert_managed_provider_for_app(
+    state: &AppState,
+    app_type: &AppType,
+    provider: &Provider,
+) -> Result<(), AppError> {
+    if provider.id != super::guard::MANAGED_PROVIDER_ID {
+        return Err(AppError::Message(format!(
+            "Managed NewAPI provider id must be {}",
+            super::guard::MANAGED_PROVIDER_ID
+        )));
+    }
+
+    state.db.save_provider(app_type.as_str(), provider)?;
+    crate::settings::set_current_provider(app_type, Some(provider.id.as_str()))?;
+    state
+        .db
+        .set_current_provider(app_type.as_str(), &provider.id)?;
+    write_live_with_common_config(state.db.as_ref(), app_type, provider)?;
+    Ok(())
+}
+
+fn rollback_applied(state: &AppState, mut applied: Vec<ProviderSnapshot>) -> Option<String> {
+    let mut errors = Vec::new();
+
+    while let Some(snapshot) = applied.pop() {
+        if let Err(err) = rollback_app(state, &snapshot) {
+            errors.push(format!("{}: {err}", snapshot.app_type.as_str()));
+        }
+    }
+
+    if errors.is_empty() {
+        None
+    } else {
+        Some(errors.join("; "))
+    }
+}
+
+fn rollback_app(state: &AppState, snapshot: &ProviderSnapshot) -> Result<(), AppError> {
+    match &snapshot.previous_provider {
+        Some(provider) => state.db.save_provider(snapshot.app_type.as_str(), provider)?,
+        None => state
+            .db
+            .delete_provider(snapshot.app_type.as_str(), provider_id())?,
+    }
+
+    crate::settings::set_current_provider(
+        &snapshot.app_type,
+        snapshot.previous_settings_current.as_deref(),
+    )?;
+
+    restore_db_current(state, &snapshot.app_type, snapshot.previous_db_current.as_deref())?;
+    restore_live_snapshot(&snapshot.app_type, snapshot.previous_live.as_ref())?;
+    Ok(())
+}
+
+fn restore_db_current(
+    state: &AppState,
+    app_type: &AppType,
+    previous_db_current: Option<&str>,
+) -> Result<(), AppError> {
+    if let Some(id) = previous_db_current {
+        state.db.set_current_provider(app_type.as_str(), id)?;
+        return Ok(());
+    }
+
+    state.db.clear_current_provider(app_type.as_str())
+}
+
+fn provider_upsert_error(err: AppError, rollback_error: Option<String>) -> AppError {
+    match rollback_error {
+        Some(rollback_error) => AppError::Message(format!(
+            "{err}; rollback also failed: {rollback_error}"
+        )),
+        None => err,
+    }
+}
+
+fn live_missing_is_snapshot_none(err: &AppError) -> bool {
+    let message = err.to_string();
+    message.contains("配置文件不存在")
+        || message.contains("configuration missing")
+        || message.contains("configuration file is missing")
+        || message.contains("file not found")
+        || message.contains("文件不存在")
 }
 
 fn base_provider(response: &BootstrapProvider, settings_config: serde_json::Value) -> Provider {

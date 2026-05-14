@@ -8,6 +8,7 @@ use uuid::Uuid;
 use super::fingerprint::build_device_fingerprint;
 
 pub const BOOTSTRAP_PATH: &str = "/api/bootstrap/cc-switch";
+pub const CLAIM_LINK_PATH: &str = "/api/bootstrap/cc-switch/claim-link";
 pub(crate) const BLOCKED_ERROR: &str = "blocked";
 const ACCEPTED_ACTIONS: [&str; 4] = ["created", "resumed", "restored", "token_rotated"];
 
@@ -83,6 +84,33 @@ pub(crate) struct GeminiModels {
     pub model: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) struct ClaimLinkRequest {
+    pub install_id: String,
+    pub device_fingerprint: String,
+    pub client_version: String,
+    pub platform: String,
+    pub arch: String,
+    pub build_channel: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub redirect_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct ClaimLinkResponse {
+    pub success: bool,
+    #[serde(default)]
+    pub message: String,
+    pub data: Option<ClaimLinkResponseData>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct ClaimLinkResponseData {
+    pub claim_url: String,
+    pub expires_at: i64,
+}
+
 pub(crate) fn load_config() -> Result<BootstrapConfig, String> {
     let base_url = read_required_config(
         "CC_SWITCH_BOOTSTRAP_BASE_URL",
@@ -130,9 +158,21 @@ pub(crate) fn build_request(install_id: String) -> BootstrapRequest {
     }
 }
 
-pub fn signature_string(timestamp: i64, nonce: &str, raw_body: &[u8]) -> String {
+pub(crate) fn build_claim_link_request(install_id: String, redirect_path: Option<String>) -> ClaimLinkRequest {
+    ClaimLinkRequest {
+        install_id,
+        device_fingerprint: build_device_fingerprint(),
+        client_version: format!("{}-proprietary.1", env!("CARGO_PKG_VERSION")),
+        platform: std::env::consts::OS.to_string(),
+        arch: std::env::consts::ARCH.to_string(),
+        build_channel: "proprietary".to_string(),
+        redirect_path,
+    }
+}
+
+pub fn signature_string(timestamp: i64, nonce: &str, raw_body: &[u8], path: &str) -> String {
     let body_hash = hex::encode(Sha256::digest(raw_body));
-    format!("POST\n{BOOTSTRAP_PATH}\n{timestamp}\n{nonce}\n{body_hash}")
+    format!("POST\n{path}\n{timestamp}\n{nonce}\n{body_hash}")
 }
 
 pub fn sign(secret: &str, message: &[u8]) -> String {
@@ -150,7 +190,7 @@ pub(crate) async fn send(
     let raw_body = serde_json::to_vec(&request).map_err(|err| err.to_string())?;
     let timestamp = chrono::Utc::now().timestamp();
     let nonce = Uuid::new_v4().to_string();
-    let signature_text = signature_string(timestamp, &nonce, &raw_body);
+    let signature_text = signature_string(timestamp, &nonce, &raw_body, BOOTSTRAP_PATH);
     let signature = sign(&config.client_secret, signature_text.as_bytes());
     let base = config.base_url.trim_end_matches('/');
     let url = format!("{base}{BOOTSTRAP_PATH}");
@@ -220,6 +260,70 @@ fn validate_response_data(data: &BootstrapResponseData) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+pub(crate) async fn send_claim_link(
+    config: &BootstrapConfig,
+    install_id: String,
+    redirect_path: Option<String>,
+) -> Result<ClaimLinkResponseData, String> {
+    let request = build_claim_link_request(install_id, redirect_path);
+    let raw_body = serde_json::to_vec(&request).map_err(|err| err.to_string())?;
+    let timestamp = chrono::Utc::now().timestamp();
+    let nonce = Uuid::new_v4().to_string();
+    let signature_text = signature_string(timestamp, &nonce, &raw_body, CLAIM_LINK_PATH);
+    let signature = sign(&config.client_secret, signature_text.as_bytes());
+    let base = config.base_url.trim_end_matches('/');
+    let url = format!("{base}{CLAIM_LINK_PATH}");
+
+    let response = reqwest::Client::builder()
+        .timeout(Duration::from_secs(20))
+        .build()
+        .map_err(|err| summarize_error(err.to_string()))?
+        .post(url)
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .header("X-CCS-Client-Id", &config.client_id)
+        .header("X-CCS-Timestamp", timestamp.to_string())
+        .header("X-CCS-Nonce", nonce)
+        .header("X-CCS-Signature", signature)
+        .body(raw_body)
+        .send()
+        .await
+        .map_err(|err| summarize_error(err.to_string()))?;
+
+    if response.status().as_u16() == 403 {
+        return Err(BLOCKED_ERROR.to_string());
+    }
+
+    if response.status().as_u16() == 423 {
+        return Err(BLOCKED_ERROR.to_string());
+    }
+
+    if !response.status().is_success() {
+        return Err(format!("claim-link http {}", response.status().as_u16()));
+    }
+
+    let payload = response
+        .json::<ClaimLinkResponse>()
+        .await
+        .map_err(|err| summarize_error(err.to_string()))?;
+
+    if !payload.success {
+        let message = payload.message.trim();
+        if is_blocked_message(message) {
+            return Err(BLOCKED_ERROR.to_string());
+        }
+
+        return Err(if message.is_empty() {
+            "claim-link failed".to_string()
+        } else {
+            summarize_error(message.to_string())
+        });
+    }
+
+    payload
+        .data
+        .ok_or_else(|| "claim-link data missing".to_string())
 }
 
 pub(crate) fn is_blocked_error(message: &str) -> bool {

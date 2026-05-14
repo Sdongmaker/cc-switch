@@ -9,9 +9,12 @@ use toml_edit::{DocumentMut, Item, TableLike};
 
 use crate::app_config::AppType;
 use crate::codex_config::{
-    get_codex_auth_path, get_codex_config_path, write_codex_live_atomic_with_stable_provider,
+    get_codex_auth_path, get_codex_config_path, write_codex_live_atomic,
+    write_codex_live_atomic_with_stable_provider,
 };
-use crate::config::{delete_file, get_claude_settings_path, read_json_file, write_json_file};
+use crate::config::{
+    delete_file, get_claude_settings_path, read_json_file, write_json_file, write_text_file,
+};
 use crate::database::Database;
 use crate::error::AppError;
 use crate::provider::Provider;
@@ -1055,6 +1058,73 @@ pub fn read_live_settings(app_type: AppType) -> Result<Value, AppError> {
             let config = crate::hermes_config::yaml_to_json(&yaml_config)?;
             Ok(config)
         }
+    }
+}
+
+pub(crate) fn restore_live_snapshot(
+    app_type: &AppType,
+    snapshot: Option<&Value>,
+) -> Result<(), AppError> {
+    match app_type {
+        AppType::Claude => {
+            let path = get_claude_settings_path();
+            match snapshot {
+                Some(value) => write_json_file(&path, value),
+                None => delete_file(&path),
+            }
+        }
+        AppType::Codex => {
+            let auth_path = get_codex_auth_path();
+            let config_path = get_codex_config_path();
+            match snapshot {
+                Some(value) => {
+                    let auth = value.get("auth").ok_or_else(|| {
+                        AppError::Config("Codex live snapshot missing auth".to_string())
+                    })?;
+                    let config = value
+                        .get("config")
+                        .and_then(|config| config.as_str())
+                        .ok_or_else(|| {
+                            AppError::Config(
+                                "Codex live snapshot missing config text".to_string(),
+                            )
+                        })?;
+                    write_codex_live_atomic(auth, Some(config))
+                }
+                None => {
+                    delete_file(&auth_path)?;
+                    delete_file(&config_path)
+                }
+            }
+        }
+        AppType::Gemini => {
+            use crate::gemini_config::{
+                get_gemini_env_path, get_gemini_settings_path, json_to_env, serialize_env_file,
+            };
+
+            let env_path = get_gemini_env_path();
+            let settings_path = get_gemini_settings_path();
+            match snapshot {
+                Some(value) => {
+                    let env_map = json_to_env(value)?;
+                    write_text_file(&env_path, &serialize_env_file(&env_map))?;
+                    if let Some(config) = value.get("config") {
+                        write_json_file(&settings_path, config)?;
+                    } else {
+                        delete_file(&settings_path)?;
+                    }
+                    Ok(())
+                }
+                None => {
+                    delete_file(&env_path)?;
+                    delete_file(&settings_path)
+                }
+            }
+        }
+        _ => Err(AppError::Message(format!(
+            "Unsupported live snapshot restore for {}",
+            app_type.as_str()
+        ))),
     }
 }
 

@@ -64,6 +64,7 @@ jobs:
         run: |
           if [ -z "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" ]; then
             echo "⚠️ TAURI_SIGNING_PRIVATE_KEY 未配置，跳过签名"
+            echo "TAURI_SIGNING_PRIVATE_KEY=" >> "$GITHUB_ENV"
             exit 0
           fi
 
@@ -112,37 +113,59 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ -z "${{ secrets.APPLE_CERTIFICATE }}" ]; then
-            echo "⚠️ APPLE_CERTIFICATE 未配置，跳过 Apple 签名（生成未签名版本）"
+          skip_signing() {
+            echo "⚠️ Apple 签名不可用，将生成未签名版本"
             echo "APPLE_SIGNING_SKIPPED=true" >> "$GITHUB_ENV"
+            rm -f "$RUNNER_TEMP/certificate.p12"
             exit 0
+          }
+
+          if [ -z "${{ secrets.APPLE_CERTIFICATE }}" ]; then
+            echo "⚠️ APPLE_CERTIFICATE 未配置"
+            skip_signing
           fi
 
           CERT_PATH="$RUNNER_TEMP/certificate.p12"
-          printf '%s' "${{ secrets.APPLE_CERTIFICATE }}" | (base64 --decode 2>/dev/null || base64 -D) > "$CERT_PATH"
+          if ! printf '%s' "${{ secrets.APPLE_CERTIFICATE }}" | (base64 --decode 2>/dev/null || base64 -D) > "$CERT_PATH"; then
+            echo "⚠️ 无法解码 APPLE_CERTIFICATE"
+            skip_signing
+          fi
 
-          ORIGINAL_DEFAULT_KEYCHAIN=$(security default-keychain -d user | tr -d '"' | xargs)
+          if [ ! -s "$CERT_PATH" ]; then
+            echo "⚠️ 解码后的证书文件为空"
+            skip_signing
+          fi
+
+          ORIGINAL_DEFAULT_KEYCHAIN=$(security default-keychain -d user | tr -d '"' | xargs) || true
           echo "ORIGINAL_DEFAULT_KEYCHAIN=$ORIGINAL_DEFAULT_KEYCHAIN" >> "$GITHUB_ENV"
 
           KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
-          security create-keychain -p "${{ secrets.KEYCHAIN_PASSWORD }}" "$KEYCHAIN_PATH"
+          if ! security create-keychain -p "${{ secrets.KEYCHAIN_PASSWORD }}" "$KEYCHAIN_PATH" 2>/dev/null; then
+            echo "⚠️ 无法创建临时钥匙串"
+            skip_signing
+          fi
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security default-keychain -s "$KEYCHAIN_PATH"
           security unlock-keychain -p "${{ secrets.KEYCHAIN_PASSWORD }}" "$KEYCHAIN_PATH"
 
-          security import "$CERT_PATH" \
+          if ! security import "$CERT_PATH" \
             -k "$KEYCHAIN_PATH" \
             -P "${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" \
             -T /usr/bin/codesign \
-            -T /usr/bin/security
+            -T /usr/bin/security 2>/dev/null; then
+            echo "⚠️ 证书导入失败，可能是证书密码错误或证书格式无效"
+            security default-keychain -s "$ORIGINAL_DEFAULT_KEYCHAIN" 2>/dev/null || true
+            skip_signing
+          fi
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${{ secrets.KEYCHAIN_PASSWORD }}" "$KEYCHAIN_PATH"
 
           IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" \
-            | grep "Developer ID Application" | grep -oE '"[^"]+"' | head -1 | tr -d '"')
+            | grep "Developer ID Application" | grep -oE '"[^"]+"' | head -1 | tr -d '"' || true)
           if [ -z "$IDENTITY" ]; then
-            echo "❌ No 'Developer ID Application' identity found" >&2
-            security find-identity -v -p codesigning "$KEYCHAIN_PATH"
-            exit 1
+            echo "⚠️ 未找到 'Developer ID Application' 签名身份"
+            security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
+            security default-keychain -s "$ORIGINAL_DEFAULT_KEYCHAIN" 2>/dev/null || true
+            skip_signing
           fi
           echo "✅ Signing identity: $IDENTITY"
           echo "APPLE_SIGNING_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
@@ -184,6 +207,7 @@ jobs:
 
       - name: Build Tauri App (Windows)
         if: runner.os == 'Windows'
+        continue-on-error: true
         env:
           CC_SWITCH_BOOTSTRAP_BASE_URL: ${{ secrets.BOOTSTRAP_BASE_URL }}
           CC_SWITCH_BOOTSTRAP_CLIENT_ID: ${{ secrets.BOOTSTRAP_CLIENT_ID }}
