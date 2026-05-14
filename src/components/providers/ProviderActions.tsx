@@ -44,6 +44,7 @@ interface ProviderActionsProps {
   isDefaultModel?: boolean;
   onSetAsDefault?: () => void;
   isProprietaryLocked?: boolean;
+  isManagedProvider?: boolean;
 }
 
 export function ProviderActions({
@@ -71,6 +72,7 @@ export function ProviderActions({
   isDefaultModel = false,
   onSetAsDefault,
   isProprietaryLocked = false,
+  isManagedProvider = false,
 }: ProviderActionsProps) {
   const { t } = useTranslation();
   const iconButtonClass = "h-8 w-8 p-1";
@@ -210,7 +212,7 @@ export function ProviderActions({
 
   const buttonState = getMainButtonState();
 
-  if (isProprietaryLocked) {
+  if (isProprietaryLocked && isManagedProvider) {
     return (
       <div className="flex items-center gap-1.5">
         <Button

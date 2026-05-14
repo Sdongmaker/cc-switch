@@ -1517,23 +1517,12 @@ impl ProxyService {
 
         let app_type_enum =
             AppType::from_str(app_type).map_err(|_| format!("无效的应用类型: {app_type}"))?;
-        if crate::proprietary_bootstrap::is_enabled()
-            && (!crate::proprietary_bootstrap::guard::is_supported_app(&app_type_enum)
-                || !crate::proprietary_bootstrap::guard::is_managed_provider_id(provider_id))
-        {
-            return Err(crate::proprietary_bootstrap::guard::locked_error().to_string());
-        }
 
         let provider = self
             .db
             .get_provider_by_id(provider_id, app_type)
             .map_err(|e| format!("读取供应商失败: {e}"))?
             .ok_or_else(|| format!("供应商不存在: {provider_id}"))?;
-        if crate::proprietary_bootstrap::is_enabled()
-            && !crate::proprietary_bootstrap::guard::is_managed_provider(&provider)
-        {
-            return Err(crate::proprietary_bootstrap::guard::locked_error().to_string());
-        }
 
         // Defense-in-depth: block official providers during proxy takeover
         if provider.category.as_deref() == Some("official") {

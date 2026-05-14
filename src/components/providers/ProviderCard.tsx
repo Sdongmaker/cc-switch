@@ -59,6 +59,7 @@ interface ProviderCardProps {
   isDefaultModel?: boolean;
   onSetAsDefault?: () => void;
   isProprietaryLocked?: boolean;
+  isManagedProvider?: boolean;
 }
 
 /** 判断是否为官方供应商（无自定义 base URL / API key，直连官方 API） */
@@ -152,6 +153,7 @@ export function ProviderCard({
   isDefaultModel,
   onSetAsDefault,
   isProprietaryLocked = false,
+  isManagedProvider = false,
 }: ProviderCardProps) {
   const { t } = useTranslation();
 
@@ -484,7 +486,7 @@ export function ProviderCard({
                   : undefined
               }
               onConfigureUsage={
-                isProprietaryLocked ||
+                (isProprietaryLocked && isManagedProvider) ||
                 isOfficial ||
                 isCopilot ||
                 isCodexOauth ||
@@ -509,6 +511,7 @@ export function ProviderCard({
               isDefaultModel={isDefaultModel}
               onSetAsDefault={onSetAsDefault}
               isProprietaryLocked={isProprietaryLocked}
+              isManagedProvider={isManagedProvider}
             />
           </div>
         </div>

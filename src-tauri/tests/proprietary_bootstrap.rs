@@ -949,13 +949,13 @@ async fn server_blocked_response_records_blocked_without_provider() {
 
 #[cfg(feature = "proprietary-bootstrap")]
 #[test]
-fn proprietary_mode_locks_public_provider_mutations() {
+fn proprietary_mode_locks_only_managed_provider_mutations() {
     let _guard = test_mutex().lock().expect("acquire test mutex");
     reset_test_fs();
     let _home = ensure_test_home();
     let state = test_state();
 
-    let provider = Provider::with_id(
+    let custom_provider = Provider::with_id(
         "custom".to_string(),
         "Custom".to_string(),
         json!({
@@ -967,49 +967,76 @@ fn proprietary_mode_locks_public_provider_mutations() {
         None,
     );
 
-    assert!(ProviderService::add(&state, AppType::Claude, provider.clone(), true).is_err());
-    assert!(ProviderService::update(&state, AppType::Claude, None, provider.clone()).is_err());
-    assert!(ProviderService::delete(&state, AppType::Claude, "custom").is_err());
-    assert!(ProviderService::remove_from_live_config(&state, AppType::OpenCode, "custom").is_err());
-    assert!(ProviderService::add_custom_endpoint(
+    let managed = managed_provider();
+
+    // Non-managed provider operations should succeed
+    ProviderService::add(&state, AppType::Claude, custom_provider.clone(), true)
+        .expect("non-managed add should be allowed");
+
+    // Adding managed provider should be rejected
+    assert!(ProviderService::add(&state, AppType::Claude, managed.clone(), true).is_err());
+
+    // Add a second custom provider and switch to it, so we can delete the first
+    let custom2 = Provider::with_id("custom2".to_string(), "Custom2".to_string(), json!({"env":{"ANTHROPIC_AUTH_TOKEN":"sk-c2","ANTHROPIC_BASE_URL":"https://api2.example.com"}}), None);
+    ProviderService::add(&state, AppType::Claude, custom2.clone(), true).expect("add custom2");
+    ProviderService::switch(&state, AppType::Claude, "custom2").expect("switch to custom2");
+
+    ProviderService::update(&state, AppType::Claude, None, custom_provider.clone())
+        .expect("non-managed update should be allowed");
+    assert!(ProviderService::update(&state, AppType::Claude, None, managed).is_err());
+
+    ProviderService::delete(&state, AppType::Claude, "custom")
+        .expect("non-managed delete should be allowed");
+    assert!(ProviderService::delete(&state, AppType::Claude, "managed-newapi").is_err());
+
+    ProviderService::remove_from_live_config(&state, AppType::OpenCode, "custom2")
+        .expect("non-managed remove_from_live_config should be allowed");
+
+    ProviderService::add_custom_endpoint(
         &state,
         AppType::Claude,
-        "custom",
+        "custom2",
         "https://api.backup.example.com".to_string(),
     )
-    .is_err());
-    assert!(ProviderService::remove_custom_endpoint(
+    .expect("non-managed add_custom_endpoint should be allowed");
+    ProviderService::remove_custom_endpoint(
         &state,
         AppType::Claude,
-        "custom",
+        "custom2",
         "https://api.backup.example.com".to_string(),
     )
-    .is_err());
-    assert!(ProviderService::update_endpoint_last_used(
+    .expect("non-managed remove_custom_endpoint should be allowed");
+    ProviderService::update_endpoint_last_used(
         &state,
         AppType::Claude,
-        "custom",
+        "custom2",
         "https://api.backup.example.com".to_string(),
     )
-    .is_err());
-    assert!(ProviderService::sync_current_to_live(&state).is_err());
-    assert!(ProviderService::sync_current_provider_for_app(&state, AppType::Claude).is_err());
+    .expect("non-managed update_endpoint_last_used should be allowed");
+
+    ProviderService::sync_current_to_live(&state)
+        .expect("sync_current_to_live should be allowed");
+    ProviderService::sync_current_provider_for_app(&state, AppType::Claude)
+        .expect("sync_current_provider_for_app should be allowed");
+
     assert!(
         ProviderService::import_default_config(&state, AppType::Claude)
             .expect("live import should be skipped in proprietary mode")
             == false
     );
-    assert!(ProviderService::update_sort_order(
+
+    ProviderService::update_sort_order(
         &state,
         AppType::Claude,
         vec![ProviderSortUpdate {
-            id: "custom".to_string(),
+            id: "custom2".to_string(),
             sort_index: 1,
         }],
     )
-    .is_err());
+    .expect("non-managed update_sort_order should be allowed");
 
-    assert!(ProviderService::upsert_universal(
+    // Non-managed universal provider operations should succeed
+    ProviderService::upsert_universal(
         &state,
         UniversalProvider::new(
             "u1".to_string(),
@@ -1019,56 +1046,64 @@ fn proprietary_mode_locks_public_provider_mutations() {
             "sk-universal".to_string(),
         ),
     )
-    .is_err());
-    assert!(ProviderService::delete_universal(&state, "u1").is_err());
-    assert!(ProviderService::sync_universal_to_apps(&state, "u1").is_err());
+    .expect("non-managed upsert_universal should be allowed");
+    ProviderService::sync_universal_to_apps(&state, "u1")
+        .expect("non-managed sync_universal should be allowed");
+    ProviderService::delete_universal(&state, "u1")
+        .expect("non-managed delete_universal should be allowed");
+
+    // Managed universal provider should be blocked from deletion
+    let managed_universal = UniversalProvider::new(
+        "managed-newapi".to_string(),
+        "Managed".to_string(),
+        "managed_newapi".to_string(),
+        "https://api.managed.example.com".to_string(),
+        "sk-managed".to_string(),
+    );
+    ProviderService::upsert_universal(&state, managed_universal)
+        .expect("managed upsert_universal should be allowed for creation");
+    assert!(ProviderService::delete_universal(&state, "managed-newapi").is_err());
 }
 
 #[cfg(feature = "proprietary-bootstrap")]
 #[tokio::test(flavor = "current_thread")]
-async fn proprietary_mode_locks_proxy_hot_switch_targets() {
+async fn proprietary_mode_allows_hot_switch_to_any_existing_provider() {
     let _guard = test_mutex().lock().expect("acquire test mutex");
     reset_test_fs();
     let _home = ensure_test_home();
     let state = test_state();
 
+    // Non-existent provider should fail (not exist, not locked)
     let err = state
         .proxy_service
         .hot_switch_provider(AppType::Claude.as_str(), "custom")
         .await
-        .expect_err("custom hot switch should be locked");
-    assert!(err.contains("NewAPI bootstrap"));
+        .expect_err("custom hot switch should fail — provider doesn't exist");
+    assert!(err.contains("不存在"));
 
-    let err = state
-        .proxy_service
-        .hot_switch_provider(AppType::OpenCode.as_str(), "managed-newapi")
-        .await
-        .expect_err("unsupported app hot switch should be locked");
-    assert!(err.contains("NewAPI bootstrap"));
-
+    // Seed a custom provider and verify hot switch succeeds
     state
         .db
         .save_provider(
             AppType::Claude.as_str(),
             &Provider::with_id(
-                "managed-newapi".to_string(),
-                "Spoofed Managed".to_string(),
+                "custom".to_string(),
+                "Custom".to_string(),
                 json!({}),
                 None,
             ),
         )
-        .expect("seed spoofed managed provider");
-    let err = state
+        .expect("seed custom provider");
+    state
         .proxy_service
-        .hot_switch_provider(AppType::Claude.as_str(), "managed-newapi")
+        .hot_switch_provider(AppType::Claude.as_str(), "custom")
         .await
-        .expect_err("spoofed managed provider hot switch should be locked");
-    assert!(err.contains("NewAPI bootstrap"));
+        .expect("custom hot switch should be allowed in proprietary mode");
 }
 
 #[cfg(feature = "proprietary-bootstrap")]
 #[test]
-fn proprietary_mode_allows_only_managed_switch_for_core_apps() {
+fn proprietary_mode_allows_switch_to_any_provider() {
     let _guard = test_mutex().lock().expect("acquire test mutex");
     reset_test_fs();
     let _home = ensure_test_home();
@@ -1078,17 +1113,24 @@ fn proprietary_mode_allows_only_managed_switch_for_core_apps() {
         .db
         .save_provider(AppType::Claude.as_str(), &managed_provider())
         .expect("seed managed provider");
+    state
+        .db
+        .save_provider(
+            AppType::Claude.as_str(),
+            &Provider::with_id("custom".to_string(), "Custom".to_string(), json!({}), None),
+        )
+        .expect("seed custom provider");
 
     ProviderService::switch(&state, AppType::Claude, "managed-newapi")
         .expect("managed provider switch should be allowed");
 
-    assert!(ProviderService::switch(&state, AppType::Claude, "other").is_err());
-    assert!(ProviderService::switch(&state, AppType::OpenCode, "managed-newapi").is_err());
+    ProviderService::switch(&state, AppType::Claude, "custom")
+        .expect("custom provider switch should be allowed in proprietary mode");
 }
 
 #[cfg(feature = "proprietary-bootstrap")]
 #[test]
-fn proprietary_mode_current_returns_managed_only_when_present() {
+fn proprietary_mode_current_returns_set_provider() {
     let _guard = test_mutex().lock().expect("acquire test mutex");
     reset_test_fs();
     let _home = ensure_test_home();
@@ -1108,38 +1150,24 @@ fn proprietary_mode_current_returns_managed_only_when_present() {
 
     assert_eq!(
         ProviderService::current(&state, AppType::Claude).expect("read current provider"),
-        ""
+        "custom"
     );
+
+    // Additive mode apps should return empty
     assert_eq!(
         ProviderService::current(&state, AppType::OpenCode).expect("read opencode current"),
         ""
     );
 
-    state
-        .db
-        .save_provider(
-            AppType::Claude.as_str(),
-            &Provider::with_id(
-                "managed-newapi".to_string(),
-                "Spoofed Managed".to_string(),
-                json!({}),
-                None,
-            ),
-        )
-        .expect("seed spoofed managed provider");
-    assert_eq!(
-        ProviderService::current(&state, AppType::Claude)
-            .expect("spoofed managed provider should not be current"),
-        ""
-    );
-    let claude = ProviderService::list(&state, AppType::Claude).expect("list claude");
-    assert!(claude.is_empty());
-    assert!(ProviderService::switch(&state, AppType::Claude, "managed-newapi").is_err());
-
+    // Seed managed provider and switch to it
     state
         .db
         .save_provider(AppType::Claude.as_str(), &managed_provider())
         .expect("seed managed provider");
+    state
+        .db
+        .set_current_provider(AppType::Claude.as_str(), "managed-newapi")
+        .expect("set managed current provider");
     assert_eq!(
         ProviderService::current(&state, AppType::Claude).expect("read managed current provider"),
         "managed-newapi"
@@ -1148,7 +1176,7 @@ fn proprietary_mode_current_returns_managed_only_when_present() {
 
 #[cfg(feature = "proprietary-bootstrap")]
 #[test]
-fn proprietary_mode_filters_provider_list_to_managed_core_apps() {
+fn proprietary_mode_list_includes_all_providers_for_core_apps() {
     let _guard = test_mutex().lock().expect("acquire test mutex");
     reset_test_fs();
     let _home = ensure_test_home();
@@ -1171,18 +1199,18 @@ fn proprietary_mode_filters_provider_list_to_managed_core_apps() {
         .expect("seed opencode provider");
 
     let claude = ProviderService::list(&state, AppType::Claude).expect("list claude");
-    assert_eq!(
-        claude.keys().cloned().collect::<Vec<_>>(),
-        vec!["managed-newapi".to_string()]
-    );
+    assert!(claude.contains_key("managed-newapi"));
+    assert!(claude.contains_key("custom"));
+    assert_eq!(claude.len(), 2);
 
+    // Unsupported apps still return empty
     let opencode = ProviderService::list(&state, AppType::OpenCode).expect("list opencode");
     assert!(opencode.is_empty());
 }
 
 #[cfg(feature = "proprietary-bootstrap")]
 #[test]
-fn proprietary_mode_blocks_provider_deeplink_import() {
+fn proprietary_mode_allows_provider_deeplink_import() {
     let _guard = test_mutex().lock().expect("acquire test mutex");
     reset_test_fs();
     let _home = ensure_test_home();
@@ -1190,7 +1218,6 @@ fn proprietary_mode_blocks_provider_deeplink_import() {
 
     let url = "ccswitch://v1/import?resource=provider&app=claude&name=DeepLink%20Claude&homepage=https%3A%2F%2Fexample.com&endpoint=https%3A%2F%2Fapi.example.com%2Fv1&apiKey=sk-test-claude-key&model=claude-sonnet-4";
     let request = parse_deeplink_url(url).expect("parse deeplink url");
-    let err = import_provider_from_deeplink(&state, request)
-        .expect_err("provider deeplink import should be locked");
-    assert!(err.to_string().contains("NewAPI bootstrap"));
+    let _provider_id = import_provider_from_deeplink(&state, request)
+        .expect("provider deeplink import should be allowed in proprietary mode");
 }

@@ -1041,12 +1041,7 @@ impl ProviderService {
             return Ok(IndexMap::new());
         }
 
-        Ok(providers
-            .into_iter()
-            .filter(|(_, provider)| {
-                crate::proprietary_bootstrap::guard::is_managed_provider(provider)
-            })
-            .collect())
+        Ok(providers)
     }
 
     /// Get current provider ID
@@ -1057,26 +1052,6 @@ impl ProviderService {
     ///
     /// 对于累加模式应用（OpenCode, OpenClaw），不存在"当前供应商"概念，直接返回空字符串。
     pub fn current(state: &AppState, app_type: AppType) -> Result<String, AppError> {
-        if crate::proprietary_bootstrap::is_enabled() {
-            if !crate::proprietary_bootstrap::guard::is_supported_app(&app_type) {
-                return Ok(String::new());
-            }
-            return state
-                .db
-                .get_provider_by_id(
-                    crate::proprietary_bootstrap::guard::MANAGED_PROVIDER_ID,
-                    app_type.as_str(),
-                )
-                .map(|provider| {
-                    provider
-                        .filter(crate::proprietary_bootstrap::guard::is_managed_provider)
-                        .map(|_| {
-                            crate::proprietary_bootstrap::guard::MANAGED_PROVIDER_ID.to_string()
-                        })
-                        .unwrap_or_default()
-                });
-        }
-
         // Additive mode apps have no "current" provider concept
         if app_type.is_additive_mode() {
             return Ok(String::new());
@@ -1092,7 +1067,9 @@ impl ProviderService {
         provider: Provider,
         add_to_live: bool,
     ) -> Result<bool, AppError> {
-        if crate::proprietary_bootstrap::is_enabled() {
+        if crate::proprietary_bootstrap::is_enabled()
+            && crate::proprietary_bootstrap::guard::is_managed_provider_id(&provider.id)
+        {
             return Err(crate::proprietary_bootstrap::guard::locked_error());
         }
 
@@ -1145,7 +1122,9 @@ impl ProviderService {
         original_id: Option<&str>,
         provider: Provider,
     ) -> Result<bool, AppError> {
-        if crate::proprietary_bootstrap::is_enabled() {
+        if crate::proprietary_bootstrap::is_enabled()
+            && crate::proprietary_bootstrap::guard::is_managed_provider_id(&provider.id)
+        {
             return Err(crate::proprietary_bootstrap::guard::locked_error());
         }
 
@@ -1344,7 +1323,9 @@ impl ProviderService {
     /// 同时检查本地 settings 和数据库的当前供应商，防止删除任一端正在使用的供应商。
     /// 对于累加模式应用（OpenCode, OpenClaw），可以随时删除任意供应商，同时从 live 配置中移除。
     pub fn delete(state: &AppState, app_type: AppType, id: &str) -> Result<(), AppError> {
-        if crate::proprietary_bootstrap::is_enabled() {
+        if crate::proprietary_bootstrap::is_enabled()
+            && crate::proprietary_bootstrap::guard::is_managed_provider_id(id)
+        {
             return Err(crate::proprietary_bootstrap::guard::locked_error());
         }
 
@@ -1419,7 +1400,9 @@ impl ProviderService {
         app_type: AppType,
         id: &str,
     ) -> Result<(), AppError> {
-        if crate::proprietary_bootstrap::is_enabled() {
+        if crate::proprietary_bootstrap::is_enabled()
+            && crate::proprietary_bootstrap::guard::is_managed_provider_id(id)
+        {
             return Err(crate::proprietary_bootstrap::guard::locked_error());
         }
 
@@ -1487,23 +1470,11 @@ impl ProviderService {
     ///    d. Write target provider config to live files
     ///    e. Sync MCP configuration
     pub fn switch(state: &AppState, app_type: AppType, id: &str) -> Result<SwitchResult, AppError> {
-        if crate::proprietary_bootstrap::is_enabled()
-            && (!crate::proprietary_bootstrap::guard::is_supported_app(&app_type)
-                || !crate::proprietary_bootstrap::guard::is_managed_provider_id(id))
-        {
-            return Err(crate::proprietary_bootstrap::guard::locked_error());
-        }
-
         // Check if provider exists
         let providers = state.db.get_all_providers(app_type.as_str())?;
         let _provider = providers
             .get(id)
             .ok_or_else(|| AppError::Message(format!("供应商 {id} 不存在")))?;
-        if crate::proprietary_bootstrap::is_enabled()
-            && !crate::proprietary_bootstrap::guard::is_managed_provider(_provider)
-        {
-            return Err(crate::proprietary_bootstrap::guard::locked_error());
-        }
 
         // OMO providers are switched through their own exclusive path.
         if matches!(app_type, AppType::OpenCode) && _provider.category.as_deref() == Some("omo") {
@@ -1710,10 +1681,6 @@ impl ProviderService {
 
     /// Sync current provider to live configuration (re-export)
     pub fn sync_current_to_live(state: &AppState) -> Result<(), AppError> {
-        if crate::proprietary_bootstrap::is_enabled() {
-            return Err(crate::proprietary_bootstrap::guard::locked_error());
-        }
-
         live::sync_current_to_live(state)
     }
 
@@ -1721,9 +1688,6 @@ impl ProviderService {
         state: &AppState,
         app_type: AppType,
     ) -> Result<(), AppError> {
-        if crate::proprietary_bootstrap::is_enabled() {
-            return Err(crate::proprietary_bootstrap::guard::locked_error());
-        }
 
         if app_type.is_additive_mode() {
             return sync_current_provider_for_app_to_live(state, &app_type);
@@ -2104,7 +2068,9 @@ impl ProviderService {
         provider_id: &str,
         url: String,
     ) -> Result<(), AppError> {
-        if crate::proprietary_bootstrap::is_enabled() {
+        if crate::proprietary_bootstrap::is_enabled()
+            && crate::proprietary_bootstrap::guard::is_managed_provider_id(provider_id)
+        {
             return Err(crate::proprietary_bootstrap::guard::locked_error());
         }
 
@@ -2118,7 +2084,9 @@ impl ProviderService {
         provider_id: &str,
         url: String,
     ) -> Result<(), AppError> {
-        if crate::proprietary_bootstrap::is_enabled() {
+        if crate::proprietary_bootstrap::is_enabled()
+            && crate::proprietary_bootstrap::guard::is_managed_provider_id(provider_id)
+        {
             return Err(crate::proprietary_bootstrap::guard::locked_error());
         }
 
@@ -2132,7 +2100,9 @@ impl ProviderService {
         provider_id: &str,
         url: String,
     ) -> Result<(), AppError> {
-        if crate::proprietary_bootstrap::is_enabled() {
+        if crate::proprietary_bootstrap::is_enabled()
+            && crate::proprietary_bootstrap::guard::is_managed_provider_id(provider_id)
+        {
             return Err(crate::proprietary_bootstrap::guard::locked_error());
         }
 
@@ -2145,15 +2115,6 @@ impl ProviderService {
         app_type: AppType,
         updates: Vec<ProviderSortUpdate>,
     ) -> Result<bool, AppError> {
-        if crate::proprietary_bootstrap::is_enabled() {
-            if updates.iter().any(|update| {
-                !crate::proprietary_bootstrap::guard::is_managed_provider_id(&update.id)
-            }) {
-                return Err(crate::proprietary_bootstrap::guard::locked_error());
-            }
-            return Ok(true);
-        }
-
         let mut providers = state.db.get_all_providers(app_type.as_str())?;
 
         for update in updates {
@@ -2611,8 +2572,20 @@ impl ProviderService {
         state: &AppState,
         provider: UniversalProvider,
     ) -> Result<bool, AppError> {
-        if crate::proprietary_bootstrap::is_enabled() {
-            return Err(crate::proprietary_bootstrap::guard::locked_error());
+        // 专有模式下，托管供应商不允许修改 baseUrl / apiKey / apps
+        if crate::proprietary_bootstrap::is_enabled()
+            && crate::proprietary_bootstrap::guard::is_managed_provider_id(&provider.id)
+        {
+            if let Ok(Some(existing)) = state.db.get_universal_provider(&provider.id) {
+                if existing.base_url != provider.base_url
+                    || existing.api_key != provider.api_key
+                    || existing.apps.claude != provider.apps.claude
+                    || existing.apps.codex != provider.apps.codex
+                    || existing.apps.gemini != provider.apps.gemini
+                {
+                    return Err(crate::proprietary_bootstrap::guard::locked_error());
+                }
+            }
         }
 
         // 保存统一供应商
@@ -2623,7 +2596,9 @@ impl ProviderService {
 
     /// 删除统一供应商
     pub fn delete_universal(state: &AppState, id: &str) -> Result<bool, AppError> {
-        if crate::proprietary_bootstrap::is_enabled() {
+        if crate::proprietary_bootstrap::is_enabled()
+            && crate::proprietary_bootstrap::guard::is_managed_provider_id(id)
+        {
             return Err(crate::proprietary_bootstrap::guard::locked_error());
         }
 
@@ -2654,9 +2629,6 @@ impl ProviderService {
 
     /// 同步统一供应商到各应用
     pub fn sync_universal_to_apps(state: &AppState, id: &str) -> Result<bool, AppError> {
-        if crate::proprietary_bootstrap::is_enabled() {
-            return Err(crate::proprietary_bootstrap::guard::locked_error());
-        }
 
         let provider = state
             .db

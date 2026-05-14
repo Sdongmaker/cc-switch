@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import type { Provider } from "@/types";
 import type { AppId, ProprietaryBootstrapState } from "@/lib/api";
 import { proprietaryBootstrapApi, providersApi } from "@/lib/api";
+import { isManagedProviderId } from "@/lib/proprietaryBootstrap";
 import { useDragSort } from "@/hooks/useDragSort";
 import {
   useOpenClawLiveProviderIds,
@@ -404,10 +405,8 @@ export function ProviderList({
     return (
       <ProviderEmptyState
         appId={appId}
-        onCreate={isProprietaryLocked ? undefined : onCreate}
-        onImport={
-          isProprietaryLocked ? undefined : () => importMutation.mutate()
-        }
+        onCreate={onCreate}
+        onImport={() => importMutation.mutate()}
         bootstrapState={bootstrapState}
         onRetryBootstrap={
           isProprietaryLocked
@@ -483,11 +482,14 @@ export function ProviderList({
                     : isProviderDefaultModel(provider.id)
                 }
                 onSetAsDefault={
-                  !isProprietaryLocked && onSetAsDefault
+                  (!isProprietaryLocked || !isManagedProviderId(provider.id)) && onSetAsDefault
                     ? () => onSetAsDefault(provider)
                     : undefined
                 }
                 isProprietaryLocked={isProprietaryLocked}
+                isManagedProvider={
+                  isProprietaryLocked && isManagedProviderId(provider.id)
+                }
               />
             );
           })}
@@ -633,6 +635,7 @@ interface SortableProviderCardProps {
   isDefaultModel?: boolean;
   onSetAsDefault?: () => void;
   isProprietaryLocked: boolean;
+  isManagedProvider?: boolean;
 }
 
 function SortableProviderCard({
@@ -664,6 +667,7 @@ function SortableProviderCard({
   isDefaultModel,
   onSetAsDefault,
   isProprietaryLocked,
+  isManagedProvider = false,
 }: SortableProviderCardProps) {
   const {
     setNodeRef,
@@ -696,7 +700,7 @@ function SortableProviderCard({
         onDisableOmoSlim={onDisableOmoSlim}
         onDuplicate={onDuplicate}
         onConfigureUsage={
-          !isProprietaryLocked && onConfigureUsage
+          (!isProprietaryLocked || !isManagedProvider) && onConfigureUsage
             ? (item) => onConfigureUsage(item)
             : undefined
         }
@@ -720,6 +724,7 @@ function SortableProviderCard({
         isDefaultModel={isDefaultModel}
         onSetAsDefault={onSetAsDefault}
         isProprietaryLocked={isProprietaryLocked}
+        isManagedProvider={isManagedProvider}
       />
     </div>
   );

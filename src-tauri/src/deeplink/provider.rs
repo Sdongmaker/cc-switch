@@ -24,10 +24,6 @@ pub fn import_provider_from_deeplink(
     state: &AppState,
     request: DeepLinkImportRequest,
 ) -> Result<String, AppError> {
-    if crate::proprietary_bootstrap::is_enabled() {
-        return Err(crate::proprietary_bootstrap::guard::provider_import_locked_error());
-    }
-
     // Verify this is a provider request
     if request.resource != "provider" {
         return Err(AppError::InvalidInput(format!(

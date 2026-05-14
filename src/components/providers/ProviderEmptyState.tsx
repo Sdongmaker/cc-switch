@@ -79,20 +79,29 @@ export function ProviderEmptyState({
         <p className="mt-2 max-w-lg text-sm text-muted-foreground">
           {description}
         </p>
-        {!isBlocked && onRetryBootstrap && (
-          <Button
-            className="mt-6"
-            onClick={onRetryBootstrap}
-            disabled={isPending || isRetryingBootstrap}
-          >
-            {isRetryingBootstrap ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="mr-2 h-4 w-4" />
-            )}
-            {t("proprietaryBootstrap.retry", { defaultValue: "重试" })}
-          </Button>
-        )}
+        <div className="mt-6 flex flex-col gap-2">
+          {!isBlocked && onRetryBootstrap && (
+            <Button
+              onClick={onRetryBootstrap}
+              disabled={isPending || isRetryingBootstrap}
+            >
+              {isRetryingBootstrap ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 h-4 w-4" />
+              )}
+              {t("proprietaryBootstrap.retry", { defaultValue: "重试" })}
+            </Button>
+          )}
+          {onCreate && (
+            <Button
+              variant={onRetryBootstrap && !isBlocked ? "outline" : "default"}
+              onClick={onCreate}
+            >
+              {t("provider.addProvider")}
+            </Button>
+          )}
+        </div>
       </div>
     );
   }

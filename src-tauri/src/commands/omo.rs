@@ -20,10 +20,6 @@ pub async fn get_current_omo_provider_id(state: State<'_, AppState>) -> Result<S
 
 #[tauri::command]
 pub async fn disable_current_omo(state: State<'_, AppState>) -> Result<(), String> {
-    if crate::proprietary_bootstrap::is_enabled() {
-        return Err(crate::proprietary_bootstrap::guard::locked_error().to_string());
-    }
-
     let providers = state
         .db
         .get_all_providers("opencode")
@@ -60,10 +56,6 @@ pub async fn get_current_omo_slim_provider_id(
 
 #[tauri::command]
 pub async fn disable_current_omo_slim(state: State<'_, AppState>) -> Result<(), String> {
-    if crate::proprietary_bootstrap::is_enabled() {
-        return Err(crate::proprietary_bootstrap::guard::locked_error().to_string());
-    }
-
     let providers = state
         .db
         .get_all_providers("opencode")

@@ -14,7 +14,7 @@
 - bootstrap 成功后写入一个固定 NewAPI provider，并设为当前 provider。
 - 后续启动幂等复用原账号和原 Token。
 - 同设备重装时由服务端 fingerprint 恢复原账号，不重复领取首次额度。
-- 专有版锁定为单提供商，禁止新增、导入、删除、切换、deep link provider 导入。
+- 专有版锁定托管供应商（`managed-newapi`），禁止删除/修改关键配置。用户可自由添加其他非托管供应商并正常管理。
 
 ### 非目标
 
@@ -300,26 +300,30 @@ Codex 使用 OpenAI 兼容接口，`base_url` 必须以 `/v1` 结尾：
 
 专有模式下，锁定必须在 Rust 服务层执行，前端隐藏按钮只是体验优化。
 
-必须锁定的入口：
+托管供应商（`id = “managed-newapi”`，`category = “managed”`，`meta.provider_type = “managed_newapi”`）受到保护，用户无法通过界面或 API 修改其关键配置。非托管供应商（用户手动添加的其他供应商）不受限制，用户可自由管理。
+
+必须锁定的入口（仅针对托管供应商）：
 
 | 入口 | 专有模式行为 |
 | --- | --- |
-| `ProviderService::add` | 只允许写入 `managed-newapi`，其他 ID 拒绝 |
-| `ProviderService::update` | 只允许 bootstrap 模块更新 `managed-newapi` |
-| `ProviderService::delete` | 拒绝删除 `managed-newapi` |
-| `ProviderService::switch` | 只允许切换到 `managed-newapi` |
-| `remove_from_live_config` | 拒绝移除 `managed-newapi` |
-| `import_provider_from_deeplink` | provider 类型 deep link 直接拒绝 |
+| `ProviderService::add` | 拒绝写入 `id = “managed-newapi”` 的供应商，其他 ID 允许 |
+| `ProviderService::update` | 拒绝更新 `id = “managed-newapi”` 的供应商，其他 ID 允许 |
+| `ProviderService::delete` | 拒绝删除 `id = “managed-newapi”` 的供应商，其他 ID 允许 |
+| `ProviderService::switch` | 无限制，允许切换到任意供应商 |
+| `remove_from_live_config` | 拒绝移除 `managed-newapi`，其他 ID 允许 |
+| `import_provider_from_deeplink` | 允许导入（通过 `ProviderService::add` 控制） |
 | `init_default_official_providers` | 专有模式跳过 |
 | live config 自动导入 | 专有模式跳过或只作为迁移备份，不写入 provider 列表 |
-| universal provider 管理 | 专有模式隐藏并拒绝保存 |
+| universal provider 管理 | 托管供应商可见但受限（禁止删除/新增，baseUrl + API Key 不可编辑，模型可编辑，三应用强制启用）；非托管供应商可自由管理 |
+| 自定义 endpoint 管理 | 拒绝操作 `managed-newapi` 的自定义 endpoint，其他 ID 允许 |
+| ClaudeDesktop / OpenCode (OMO) / 其他非核心应用 | 无专有限制，正常使用 |
 
 前端建议：
 
-- 隐藏“新增供应商”“导入”“复制”“删除”“切换”按钮。
-- provider 列表只展示固定 NewAPI provider。
-- 不展示自定义 gateway preset。
-- 首次网络失败且无 provider 时，展示“正在开户注册/重试”状态，而不是开放手动添加 provider。
+- 托管供应商（`managed-newapi`）：隐藏”删除””复制”按钮，API 地址和 API Key 为只读，应用开关锁定为启用。
+- 非托管供应商：正常显示全部操作按钮。
+- 统一供应商面板：展示托管供应商，隐藏”添加统一供应商”按钮。
+- 首次网络失败且无 provider 时，展示”正在开户注册/重试”状态，同时提供手动添加供应商入口。
 
 ## 9. 网络失败与恢复策略
 

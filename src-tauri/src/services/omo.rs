@@ -246,10 +246,6 @@ impl OmoService {
         state: &AppState,
         v: &OmoVariant,
     ) -> Result<crate::provider::Provider, AppError> {
-        if crate::proprietary_bootstrap::is_enabled() {
-            return Err(crate::proprietary_bootstrap::guard::locked_error());
-        }
-
         let actual_path = Self::resolve_local_config_path(v)?;
         let obj = Self::read_jsonc_object(&actual_path)?;
 

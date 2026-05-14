@@ -185,8 +185,30 @@ function App() {
   const { data: bootstrapState } = useQuery({
     queryKey: ["proprietaryBootstrap"],
     queryFn: () => proprietaryBootstrapApi.getState(),
+    refetchInterval: (query) => {
+      if (!query.state.data?.enabled) return false;
+      const status = query.state.data.status;
+      if (status === "pending") return 3000;
+      if (status === "error" || status === "ready") return 30000;
+      return false;
+    },
   });
   const proprietaryMode = isProprietaryMode(bootstrapState);
+
+  const prevBootstrapStatus = useRef(bootstrapState?.status);
+  useEffect(() => {
+    const prev = prevBootstrapStatus.current;
+    const curr = bootstrapState?.status;
+    if (
+      proprietaryMode &&
+      prev != null &&
+      prev !== "ready" &&
+      curr === "ready"
+    ) {
+      queryClient.invalidateQueries({ queryKey: ["providers"] });
+    }
+    prevBootstrapStatus.current = curr;
+  }, [bootstrapState?.status, proprietaryMode, queryClient]);
   const dragBarHeight = useAppWindowControls ? 32 : DEFAULT_DRAG_BAR_HEIGHT;
   const contentTopOffset = dragBarHeight + HEADER_HEIGHT;
   const visibleApps: VisibleApps = settingsData?.visibleApps ?? {
@@ -234,12 +256,6 @@ function App() {
       setActiveApp(getFirstVisibleApp());
     }
   }, [visibleApps, activeApp, proprietaryMode]);
-
-  useEffect(() => {
-    if (proprietaryMode && currentView === "universal") {
-      setCurrentView("providers");
-    }
-  }, [currentView, proprietaryMode]);
 
   // Fallback from sessions view when switching to an app without session support
   useEffect(() => {
@@ -748,10 +764,6 @@ function App() {
   };
 
   const handleDuplicateProvider = async (provider: Provider) => {
-    if (proprietaryMode) {
-      return;
-    }
-
     const newSortIndex =
       provider.sortIndex !== undefined ? provider.sortIndex + 1 : undefined;
 
@@ -982,14 +994,7 @@ function App() {
             <AgentsPanel onOpenChange={() => setCurrentView("providers")} />
           );
         case "universal":
-          return proprietaryMode ? (
-            <div className="px-6 pt-4 text-sm text-muted-foreground">
-              {t("proprietaryBootstrap.universalLocked", {
-                defaultValue:
-                  "专有版由 NewAPI 托管供应商，统一供应商管理已关闭。",
-              })}
-            </div>
-          ) : (
+          return (
             <div className="px-6 pt-4">
               <UniversalProviderPanel />
             </div>
@@ -1030,19 +1035,15 @@ function App() {
                       activeProviderId={activeProviderId}
                       onSwitch={switchProvider}
                       onEdit={(provider) => {
-                        if (proprietaryMode) return;
                         setEditingProvider(provider);
                       }}
                       onDelete={(provider) => {
-                        if (!proprietaryMode) {
-                          setConfirmAction({ provider, action: "delete" });
-                        }
+                        setConfirmAction({ provider, action: "delete" });
                       }}
                       onRemoveFromConfig={
-                        !proprietaryMode &&
-                        (activeApp === "opencode" ||
-                          activeApp === "openclaw" ||
-                          activeApp === "hermes")
+                        activeApp === "opencode" ||
+                        activeApp === "openclaw" ||
+                        activeApp === "hermes"
                           ? (provider) =>
                               setConfirmAction({ provider, action: "remove" })
                           : undefined
@@ -1056,28 +1057,22 @@ function App() {
                           : undefined
                       }
                       onDuplicate={handleDuplicateProvider}
-                      onConfigureUsage={
-                        proprietaryMode ? undefined : setUsageProvider
-                      }
+                      onConfigureUsage={setUsageProvider}
                       onOpenWebsite={handleOpenWebsite}
                       onOpenTerminal={
-                        !proprietaryMode && activeApp === "claude"
+                        activeApp === "claude"
                           ? handleOpenTerminal
                           : undefined
                       }
-                      onCreate={
-                        proprietaryMode ? undefined : () => setIsAddOpen(true)
-                      }
+                      onCreate={() => setIsAddOpen(true)}
                       isProprietaryLocked={proprietaryMode}
                       bootstrapState={bootstrapState}
                       onSetAsDefault={
-                        proprietaryMode
-                          ? undefined
-                          : activeApp === "openclaw"
-                            ? setAsDefaultModel
-                            : activeApp === "hermes"
-                              ? switchProvider
-                              : undefined
+                        activeApp === "openclaw"
+                          ? setAsDefaultModel
+                          : activeApp === "hermes"
+                            ? switchProvider
+                            : undefined
                       }
                     />
                   </motion.div>
@@ -1599,15 +1594,13 @@ function App() {
                       </AnimatePresence>
                     </div>
 
-                    {!proprietaryMode && (
-                      <Button
-                        onClick={() => setIsAddOpen(true)}
-                        size="icon"
-                        className={`ml-2 ${addActionButtonClass}`}
-                      >
-                        <Plus className="w-5 h-5" />
-                      </Button>
-                    )}
+                    <Button
+                      onClick={() => setIsAddOpen(true)}
+                      size="icon"
+                      className={`ml-2 ${addActionButtonClass}`}
+                    >
+                      <Plus className="w-5 h-5" />
+                    </Button>
                   </>
                 )}
               </div>
@@ -1624,17 +1617,12 @@ function App() {
       </main>
 
       <AddProviderDialog
-        open={isAddOpen && !proprietaryMode}
+        open={isAddOpen}
         onOpenChange={(open) => {
-          if (!proprietaryMode) {
-            setIsAddOpen(open);
-          } else {
-            setIsAddOpen(false);
-          }
+          setIsAddOpen(open);
         }}
         appId={activeApp}
         onSubmit={addProvider}
-        bootstrapState={bootstrapState}
       />
 
       <EditProviderDialog

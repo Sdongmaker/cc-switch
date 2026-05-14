@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Layers } from "lucide-react";
+import { Layers, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -8,13 +8,24 @@ import { UniversalProviderCard } from "./UniversalProviderCard";
 import { UniversalProviderFormModal } from "./UniversalProviderFormModal";
 import { proprietaryBootstrapApi, universalProvidersApi } from "@/lib/api";
 import type { UniversalProvider, UniversalProvidersMap } from "@/types";
-import { isProprietaryMode } from "@/lib/proprietaryBootstrap";
+import {
+  isProprietaryMode,
+  isManagedUniversalProvider,
+} from "@/lib/proprietaryBootstrap";
+import { Button } from "@/components/ui/button";
 
 export function UniversalProviderPanel() {
   const { t } = useTranslation();
   const { data: bootstrapState } = useQuery({
     queryKey: ["proprietaryBootstrap"],
     queryFn: () => proprietaryBootstrapApi.getState(),
+    refetchInterval: (query) => {
+      if (!query.state.data?.enabled) return false;
+      const status = query.state.data.status;
+      if (status === "pending") return 3000;
+      if (status === "error" || status === "ready") return 30000;
+      return false;
+    },
   });
   const isLocked = isProprietaryMode(bootstrapState);
 
@@ -54,12 +65,8 @@ export function UniversalProviderPanel() {
   }, [t]);
 
   useEffect(() => {
-    if (isLocked) {
-      setLoading(false);
-      return;
-    }
     loadProviders();
-  }, [isLocked, loadProviders]);
+  }, [loadProviders]);
 
   // 添加/编辑供应商
   const handleSave = useCallback(
@@ -227,16 +234,6 @@ export function UniversalProviderPanel() {
 
   const providerList = Object.values(providers);
 
-  if (isLocked) {
-    return (
-      <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-        {t("proprietaryBootstrap.universalLocked", {
-          defaultValue: "专有版由 NewAPI 托管供应商，统一供应商管理已关闭。",
-        })}
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-4">
       {/* 头部 */}
@@ -248,6 +245,11 @@ export function UniversalProviderPanel() {
         <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
           {providerList.length}
         </span>
+        {isLocked && (
+          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+            {t("proprietaryBootstrap.managedBadge", { defaultValue: "已托管" })}
+          </span>
+        )}
       </div>
 
       {/* 描述 */}
@@ -271,11 +273,25 @@ export function UniversalProviderPanel() {
               defaultValue: "还没有统一供应商",
             })}
           </p>
-          <p className="mt-1 text-xs text-muted-foreground/70">
-            {t("universalProvider.emptyHint", {
-              defaultValue: "点击下方「添加统一供应商」按钮创建一个",
-            })}
-          </p>
+          {!isLocked && (
+            <>
+              <p className="mt-1 text-xs text-muted-foreground/70">
+                {t("universalProvider.emptyHint", {
+                  defaultValue: "点击下方「添加统一供应商」按钮创建一个",
+                })}
+              </p>
+              <Button
+                className="mt-4"
+                onClick={() => {
+                  setEditingProvider(null);
+                  setIsFormOpen(true);
+                }}
+              >
+                <Plus className="mr-1.5 h-4 w-4" />
+                {t("universalProvider.add", { defaultValue: "添加统一供应商" })}
+              </Button>
+            </>
+          )}
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -283,6 +299,9 @@ export function UniversalProviderPanel() {
             <UniversalProviderCard
               key={provider.id}
               provider={provider}
+              isManaged={
+                isLocked && isManagedUniversalProvider(provider)
+              }
               onEdit={handleEdit}
               onDelete={handleDeleteClick}
               onSync={handleSyncClick}
@@ -290,6 +309,21 @@ export function UniversalProviderPanel() {
             />
           ))}
         </div>
+      )}
+
+      {/* 添加按钮（非空列表时） */}
+      {!isLocked && providerList.length > 0 && (
+        <Button
+          variant="outline"
+          className="w-full"
+          onClick={() => {
+            setEditingProvider(null);
+            setIsFormOpen(true);
+          }}
+        >
+          <Plus className="mr-1.5 h-4 w-4" />
+          {t("universalProvider.add", { defaultValue: "添加统一供应商" })}
+        </Button>
       )}
 
       {/* 表单模态框 */}
@@ -302,6 +336,11 @@ export function UniversalProviderPanel() {
         onSave={handleSave}
         onSaveAndSync={handleSaveAndSync}
         editingProvider={editingProvider}
+        isManaged={
+          editingProvider != null
+            ? isLocked && isManagedUniversalProvider(editingProvider)
+            : false
+        }
       />
 
       {/* 删除确认对话框 */}

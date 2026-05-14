@@ -6,6 +6,7 @@ import type { UniversalProvider } from "@/types";
 
 interface UniversalProviderCardProps {
   provider: UniversalProvider;
+  isManaged?: boolean;
   onEdit: (provider: UniversalProvider) => void;
   onDelete: (id: string) => void;
   onSync: (id: string) => void;
@@ -14,6 +15,7 @@ interface UniversalProviderCardProps {
 
 export function UniversalProviderCard({
   provider,
+  isManaged = false,
   onEdit,
   onDelete,
   onSync,
@@ -46,6 +48,11 @@ export function UniversalProviderCard({
 
         {/* 操作按钮 */}
         <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          {isManaged && (
+            <span className="mr-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+              {t("proprietaryBootstrap.managedBadge", { defaultValue: "已托管" })}
+            </span>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -55,15 +62,28 @@ export function UniversalProviderCard({
           >
             <RefreshCw className="h-4 w-4" />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => onDuplicate(provider)}
-            title={t("universalProvider.duplicate", { defaultValue: "复制" })}
-          >
-            <Copy className="h-4 w-4" />
-          </Button>
+          {!isManaged && (
+            <>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => onDuplicate(provider)}
+                title={t("universalProvider.duplicate", { defaultValue: "复制" })}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-destructive hover:text-destructive"
+                onClick={() => onDelete(provider.id)}
+                title={t("common.delete", { defaultValue: "删除" })}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -72,15 +92,6 @@ export function UniversalProviderCard({
             title={t("common.edit", { defaultValue: "编辑" })}
           >
             <Edit2 className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-destructive hover:text-destructive"
-            onClick={() => onDelete(provider.id)}
-            title={t("common.delete", { defaultValue: "删除" })}
-          >
-            <Trash2 className="h-4 w-4" />
           </Button>
         </div>
       </div>

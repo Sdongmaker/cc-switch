@@ -20,3 +20,17 @@ export function isProprietarySupportedApp(appId: AppId): boolean {
 export function firstProprietarySupportedApp(): AppId {
   return PROPRIETARY_SUPPORTED_APPS[0];
 }
+
+export function isManagedProviderId(id: string): boolean {
+  return id === "managed-newapi";
+}
+
+export function isManagedUniversalProvider(provider: {
+  providerType?: string;
+  id?: string;
+}): boolean {
+  return (
+    provider.providerType === "managed_newapi" ||
+    isManagedProviderId(provider.id || "")
+  );
+}

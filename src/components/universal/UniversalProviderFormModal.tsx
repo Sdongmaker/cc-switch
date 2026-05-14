@@ -23,6 +23,7 @@ interface UniversalProviderFormModalProps {
   onSaveAndSync?: (provider: UniversalProvider) => void;
   editingProvider?: UniversalProvider | null;
   initialPreset?: UniversalProviderPreset | null;
+  isManaged?: boolean;
 }
 
 export function UniversalProviderFormModal({
@@ -32,6 +33,7 @@ export function UniversalProviderFormModal({
   onSaveAndSync,
   editingProvider,
   initialPreset,
+  isManaged = false,
 }: UniversalProviderFormModalProps) {
   const { t } = useTranslation();
   const isEditMode = !!editingProvider;
@@ -414,7 +416,15 @@ requires_openai_auth = true`;
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
               placeholder="https://api.example.com"
+              disabled={isManaged && isEditMode}
             />
+            {isManaged && isEditMode && (
+              <p className="text-xs text-muted-foreground">
+                {t("universalProvider.managedFieldHint", {
+                  defaultValue: "托管供应商的 API 地址由系统管理，不可修改",
+                })}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -429,6 +439,7 @@ requires_openai_auth = true`;
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="sk-..."
                 className="pr-10"
+                disabled={isManaged && isEditMode}
               />
               <Button
                 type="button"
@@ -444,6 +455,13 @@ requires_openai_auth = true`;
                 )}
               </Button>
             </div>
+            {isManaged && isEditMode && (
+              <p className="text-xs text-muted-foreground">
+                {t("universalProvider.managedFieldHint", {
+                  defaultValue: "托管供应商的 API Key 由系统管理，不可修改",
+                })}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -489,6 +507,7 @@ requires_openai_auth = true`;
               <Switch
                 checked={claudeEnabled}
                 onCheckedChange={setClaudeEnabled}
+                disabled={isManaged && isEditMode}
               />
             </div>
             <div className="flex items-center justify-between rounded-lg border p-3">
@@ -499,6 +518,7 @@ requires_openai_auth = true`;
               <Switch
                 checked={codexEnabled}
                 onCheckedChange={setCodexEnabled}
+                disabled={isManaged && isEditMode}
               />
             </div>
             <div className="flex items-center justify-between rounded-lg border p-3">
@@ -509,9 +529,17 @@ requires_openai_auth = true`;
               <Switch
                 checked={geminiEnabled}
                 onCheckedChange={setGeminiEnabled}
+                disabled={isManaged && isEditMode}
               />
             </div>
           </div>
+          {isManaged && isEditMode && (
+            <p className="text-xs text-muted-foreground">
+              {t("universalProvider.managedAppsHint", {
+                defaultValue: "托管供应商的应用启用状态由系统管理",
+              })}
+            </p>
+          )}
         </div>
 
         {/* 模型配置 */}
