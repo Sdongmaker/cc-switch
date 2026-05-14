@@ -48,6 +48,9 @@ pub struct ClaimLinkPublicData {
 }
 
 pub fn is_enabled() -> bool {
+    if cfg!(feature = "test-hooks") {
+        return false;
+    }
     cfg!(feature = "proprietary-bootstrap")
 }
 

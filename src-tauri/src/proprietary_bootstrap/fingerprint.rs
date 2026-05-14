@@ -108,8 +108,7 @@ fn read_machine_id() -> Option<String> {
             return None;
         }
         let (_, raw) = line.split_once('=')?;
-        Some(raw)
-            .map(str::trim)
+        Some(str::trim(raw))
             .map(|value| value.trim_matches('"'))
             .map(str::trim)
             .map(str::to_string)
