@@ -2127,12 +2127,9 @@ impl ProviderService {
         updates: Vec<ProviderSortUpdate>,
     ) -> Result<bool, AppError> {
         if crate::proprietary_bootstrap::is_enabled() {
-            if updates
-                .iter()
-                .any(|update| {
-                    !crate::proprietary_bootstrap::guard::is_managed_provider_id(&update.id)
-                })
-            {
+            if updates.iter().any(|update| {
+                !crate::proprietary_bootstrap::guard::is_managed_provider_id(&update.id)
+            }) {
                 return Err(crate::proprietary_bootstrap::guard::locked_error());
             }
             return Ok(true);

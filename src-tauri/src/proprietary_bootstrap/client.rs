@@ -158,7 +158,10 @@ pub(crate) fn build_request(install_id: String) -> BootstrapRequest {
     }
 }
 
-pub(crate) fn build_claim_link_request(install_id: String, redirect_path: Option<String>) -> ClaimLinkRequest {
+pub(crate) fn build_claim_link_request(
+    install_id: String,
+    redirect_path: Option<String>,
+) -> ClaimLinkRequest {
     ClaimLinkRequest {
         install_id,
         device_fingerprint: build_device_fingerprint(),
@@ -349,7 +352,8 @@ pub fn summarize_error(message: String) -> String {
 fn redact_secrets(message: &str) -> String {
     let token_re = Regex::new(r"sk-[A-Za-z0-9_-]{6,}").expect("valid token regex");
     let value = token_re.replace_all(message, "sk-[redacted]");
-    let bearer_re =
-        Regex::new(r"(?i)Bearer\s+[A-Za-z0-9._~+/=-]+").expect("valid bearer regex");
-    bearer_re.replace_all(&value, "Bearer [redacted]").into_owned()
+    let bearer_re = Regex::new(r"(?i)Bearer\s+[A-Za-z0-9._~+/=-]+").expect("valid bearer regex");
+    bearer_re
+        .replace_all(&value, "Bearer [redacted]")
+        .into_owned()
 }

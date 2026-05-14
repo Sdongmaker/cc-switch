@@ -320,8 +320,11 @@ fn seed_existing_claude_state(state: &AppState, home: &Path) {
 fn seed_invalid_codex_live_config(home: &Path) {
     let codex_dir = home.join(".codex");
     std::fs::create_dir_all(&codex_dir).expect("create codex dir");
-    std::fs::write(codex_dir.join("auth.json"), r#"{"OPENAI_API_KEY":"sk-old-codex"}"#)
-        .expect("seed codex auth");
+    std::fs::write(
+        codex_dir.join("auth.json"),
+        r#"{"OPENAI_API_KEY":"sk-old-codex"}"#,
+    )
+    .expect("seed codex auth");
     std::fs::write(codex_dir.join("config.toml"), "model_provider = [")
         .expect("seed invalid codex config");
 }
@@ -410,12 +413,20 @@ async fn bootstrap_success_writes_managed_newapi_for_core_apps() {
 
     for app in [AppType::Claude, AppType::Codex, AppType::Gemini] {
         let providers = ProviderService::list(&state, app.clone()).expect("list providers");
-        assert_eq!(providers.len(), 1, "{} should have one provider", app.as_str());
+        assert_eq!(
+            providers.len(),
+            1,
+            "{} should have one provider",
+            app.as_str()
+        );
         let provider = providers
             .get("managed-newapi")
             .expect("managed NewAPI provider exists");
         assert_eq!(provider.category.as_deref(), Some("managed"));
-        assert_eq!(provider.website_url.as_deref(), Some("https://api.example.com/"));
+        assert_eq!(
+            provider.website_url.as_deref(),
+            Some("https://api.example.com/")
+        );
         assert_eq!(
             provider
                 .meta

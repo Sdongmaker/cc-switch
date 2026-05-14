@@ -1085,9 +1085,7 @@ pub(crate) fn restore_live_snapshot(
                         .get("config")
                         .and_then(|config| config.as_str())
                         .ok_or_else(|| {
-                            AppError::Config(
-                                "Codex live snapshot missing config text".to_string(),
-                            )
+                            AppError::Config("Codex live snapshot missing config text".to_string())
                         })?;
                     write_codex_live_atomic(auth, Some(config))
                 }

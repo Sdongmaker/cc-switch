@@ -23,9 +23,9 @@ mod opencode_config;
 mod panic_hook;
 mod prompt;
 mod prompt_files;
+pub mod proprietary_bootstrap;
 mod provider;
 mod provider_defaults;
-pub mod proprietary_bootstrap;
 mod proxy;
 mod services;
 mod session_manager;
@@ -52,8 +52,8 @@ pub use mcp::{
 pub use provider::{Provider, ProviderMeta, UniversalProvider};
 pub use services::{
     skill::{migrate_skills_to_ssot, ImportSkillSelection},
-    ConfigService, EndpointLatency, McpService, PromptService, ProviderService,
-    ProviderSortUpdate, ProxyService, SkillService, SpeedtestService,
+    ConfigService, EndpointLatency, McpService, PromptService, ProviderService, ProviderSortUpdate,
+    ProxyService, SkillService, SpeedtestService,
 };
 pub use settings::{update_settings, AppSettings, ProprietaryBootstrapSettings};
 pub use store::AppState;
@@ -1591,9 +1591,7 @@ async fn restore_proxy_state_on_startup(state: &store::AppState) {
 
 fn initialize_common_config_snippets(state: &store::AppState) {
     if crate::proprietary_bootstrap::is_enabled() {
-        log::info!(
-            "Proprietary mode enabled; skipped automatic provider common-config extraction"
-        );
+        log::info!("Proprietary mode enabled; skipped automatic provider common-config extraction");
         return;
     }
 

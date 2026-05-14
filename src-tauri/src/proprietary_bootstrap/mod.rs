@@ -168,11 +168,7 @@ async fn run_attempt(state: &AppState) -> Result<AttemptOutcome, String> {
                 Ok(AttemptOutcome::Ready)
             }
             Err(err) => {
-                record_retryable_failure(
-                    state,
-                    settings,
-                    format!("provider upsert failed: {err}"),
-                )
+                record_retryable_failure(state, settings, format!("provider upsert failed: {err}"))
             }
         },
         Err(err) if client::is_blocked_error(&err) => {

@@ -17,9 +17,7 @@ fn fingerprint_source() -> String {
         parts.push(format!("host={hostname}"));
     }
 
-    if let Some(stable_config_suffix) =
-        stable_config_suffix(&crate::config::get_app_config_dir())
-    {
+    if let Some(stable_config_suffix) = stable_config_suffix(&crate::config::get_app_config_dir()) {
         parts.push(format!("config={stable_config_suffix}"));
     }
 

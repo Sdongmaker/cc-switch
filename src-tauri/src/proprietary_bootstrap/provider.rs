@@ -102,7 +102,9 @@ fn snapshot_app_state(state: &AppState, app_type: &AppType) -> Result<ProviderSn
 
     Ok(ProviderSnapshot {
         app_type: app_type.clone(),
-        previous_provider: state.db.get_provider_by_id(provider_id(), app_type.as_str())?,
+        previous_provider: state
+            .db
+            .get_provider_by_id(provider_id(), app_type.as_str())?,
         previous_db_current: state.db.get_current_provider(app_type.as_str())?,
         previous_settings_current: crate::settings::get_current_provider(app_type),
         previous_live,
@@ -148,7 +150,9 @@ fn rollback_applied(state: &AppState, mut applied: Vec<ProviderSnapshot>) -> Opt
 
 fn rollback_app(state: &AppState, snapshot: &ProviderSnapshot) -> Result<(), AppError> {
     match &snapshot.previous_provider {
-        Some(provider) => state.db.save_provider(snapshot.app_type.as_str(), provider)?,
+        Some(provider) => state
+            .db
+            .save_provider(snapshot.app_type.as_str(), provider)?,
         None => state
             .db
             .delete_provider(snapshot.app_type.as_str(), provider_id())?,
@@ -159,7 +163,11 @@ fn rollback_app(state: &AppState, snapshot: &ProviderSnapshot) -> Result<(), App
         snapshot.previous_settings_current.as_deref(),
     )?;
 
-    restore_db_current(state, &snapshot.app_type, snapshot.previous_db_current.as_deref())?;
+    restore_db_current(
+        state,
+        &snapshot.app_type,
+        snapshot.previous_db_current.as_deref(),
+    )?;
     restore_live_snapshot(&snapshot.app_type, snapshot.previous_live.as_ref())?;
     Ok(())
 }
@@ -179,9 +187,9 @@ fn restore_db_current(
 
 fn provider_upsert_error(err: AppError, rollback_error: Option<String>) -> AppError {
     match rollback_error {
-        Some(rollback_error) => AppError::Message(format!(
-            "{err}; rollback also failed: {rollback_error}"
-        )),
+        Some(rollback_error) => {
+            AppError::Message(format!("{err}; rollback also failed: {rollback_error}"))
+        }
         None => err,
     }
 }
@@ -223,7 +231,10 @@ fn build_claude_provider(response: &BootstrapProvider, base_url: &str) -> Provid
         "claude-haiku-4-5-20251001",
     );
     let sonnet = model_or(models.and_then(|m| m.sonnet_model.as_deref()), &model);
-    let opus = model_or(models.and_then(|m| m.opus_model.as_deref()), "claude-opus-4-7");
+    let opus = model_or(
+        models.and_then(|m| m.opus_model.as_deref()),
+        "claude-opus-4-7",
+    );
 
     base_provider(
         response,
