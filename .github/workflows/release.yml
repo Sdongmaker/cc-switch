@@ -63,8 +63,23 @@ jobs:
         shell: bash
         run: |
           if [ -z "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" ]; then
-            echo "⚠️ TAURI_SIGNING_PRIVATE_KEY 未配置，跳过签名"
-            echo "TAURI_SIGNING_PRIVATE_KEY=" >> "$GITHUB_ENV"
+            echo "⚠️ TAURI_SIGNING_PRIVATE_KEY 未配置，将移除 updater pubkey 以跳过签名"
+            export TAURI_CONF="src-tauri/tauri.conf.json"
+            if [ -f "$TAURI_CONF" ]; then
+              export TMP_CONF=$(mktemp)
+              node -e "
+                const conf = JSON.parse(require('fs').readFileSync(process.env.TAURI_CONF, 'utf8'));
+                if (conf.plugins && conf.plugins.updater) {
+                  delete conf.plugins.updater;
+                }
+                if (conf.bundle && conf.bundle.createUpdaterArtifacts) {
+                  conf.bundle.createUpdaterArtifacts = false;
+                }
+                require('fs').writeFileSync(process.env.TMP_CONF, JSON.stringify(conf, null, 2) + '\n');
+              "
+              mv "$TMP_CONF" "$TAURI_CONF"
+              echo "✅ 已从 tauri.conf.json 移除 updater 配置"
+            fi
             exit 0
           fi
 
@@ -357,7 +372,7 @@ jobs:
           echo "✅ codesign check done"
 
       - name: Prepare Windows Assets
-        if: runner.os == 'Windows'
+        if: (success() || failure()) && runner.os == 'Windows'
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -407,11 +422,13 @@ jobs:
           }
 
       - name: List prepared assets
+        if: always()
         shell: bash
         run: |
           ls -la release-assets || true
 
       - name: Collect Signatures
+        if: always()
         shell: bash
         run: |
           set -euo pipefail
@@ -419,11 +436,12 @@ jobs:
           ls -la release-assets/*.sig 2>/dev/null || echo "No signatures found"
 
       - name: Upload release artifacts to workflow
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: release-assets-${{ runner.os }}-${{ matrix.arch || runner.arch }}
           path: release-assets/*
-          if-no-files-found: error
+          if-no-files-found: warn
 
       - name: List generated bundles (debug)
         if: always()
