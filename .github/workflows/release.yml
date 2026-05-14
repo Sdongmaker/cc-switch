@@ -194,7 +194,6 @@ jobs:
         shell: bash
         timeout-minutes: 90
         env:
-          APPLE_SIGNING_IDENTITY: ${{ env.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -203,6 +202,10 @@ jobs:
           CC_SWITCH_BOOTSTRAP_CLIENT_SECRET: ${{ secrets.BOOTSTRAP_CLIENT_SECRET }}
         run: |
           set -euo pipefail
+          if [ "${APPLE_SIGNING_SKIPPED:-true}" = "true" ]; then
+            unset APPLE_SIGNING_IDENTITY
+          fi
+
           max_attempts=3
           for attempt in $(seq 1 "$max_attempts"); do
             echo "=== macOS build attempt ${attempt}/${max_attempts} ==="

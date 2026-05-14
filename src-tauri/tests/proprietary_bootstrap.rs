@@ -52,7 +52,14 @@ fn default_build_reports_proprietary_bootstrap_disabled() {
 
 #[cfg(feature = "proprietary-bootstrap")]
 fn test_state() -> AppState {
+    #[cfg(feature = "test-hooks")]
+    enable_proprietary_mode_for_test();
     AppState::new(Arc::new(Database::memory().expect("create memory db")))
+}
+
+#[cfg(all(feature = "proprietary-bootstrap", feature = "test-hooks"))]
+fn enable_proprietary_mode_for_test() {
+    cc_switch_lib::proprietary_bootstrap::set_enabled_for_test(true);
 }
 
 #[cfg(all(feature = "proprietary-bootstrap", feature = "test-hooks"))]
@@ -389,6 +396,7 @@ fn bootstrap_error_summary_redacts_api_tokens() {
 #[tokio::test(flavor = "current_thread")]
 async fn bootstrap_success_writes_managed_newapi_for_core_apps() {
     let _guard = test_mutex().lock().expect("acquire test mutex");
+    enable_proprietary_mode_for_test();
     reset_test_fs();
     let home = ensure_test_home();
     let state = test_state();
@@ -615,6 +623,7 @@ async fn bootstrap_success_writes_managed_newapi_for_core_apps() {
 #[tokio::test(flavor = "current_thread")]
 async fn token_rotated_overwrites_existing_api_key() {
     let _guard = test_mutex().lock().expect("acquire test mutex");
+    enable_proprietary_mode_for_test();
     reset_test_fs();
     let _home = ensure_test_home();
     let state = test_state();
@@ -662,6 +671,7 @@ async fn token_rotated_overwrites_existing_api_key() {
 #[tokio::test(flavor = "current_thread")]
 async fn bootstrap_upsert_rolls_back_prior_apps_when_later_live_read_fails() {
     let _guard = test_mutex().lock().expect("acquire test mutex");
+    enable_proprietary_mode_for_test();
     reset_test_fs();
     let home = ensure_test_home();
     let state = test_state();
@@ -720,6 +730,7 @@ async fn bootstrap_upsert_rolls_back_prior_apps_when_later_live_read_fails() {
 #[tokio::test(flavor = "current_thread")]
 async fn bootstrap_upsert_rolls_back_db_when_codex_live_write_fails() {
     let _guard = test_mutex().lock().expect("acquire test mutex");
+    enable_proprietary_mode_for_test();
     reset_test_fs();
     let home = ensure_test_home();
     let state = test_state();
@@ -767,6 +778,7 @@ async fn bootstrap_upsert_rolls_back_db_when_codex_live_write_fails() {
 #[tokio::test(flavor = "current_thread")]
 async fn bootstrap_retry_recovers_after_rolled_back_partial_upsert() {
     let _guard = test_mutex().lock().expect("acquire test mutex");
+    enable_proprietary_mode_for_test();
     reset_test_fs();
     let home = ensure_test_home();
     let state = test_state();
@@ -822,6 +834,7 @@ wire_api = "responses"
 #[tokio::test(flavor = "current_thread")]
 async fn startup_failure_with_cached_provider_keeps_provider_and_records_error() {
     let _guard = test_mutex().lock().expect("acquire test mutex");
+    enable_proprietary_mode_for_test();
     reset_test_fs();
     let _home = ensure_test_home();
     let state = test_state();
@@ -868,6 +881,7 @@ async fn startup_failure_with_cached_provider_keeps_provider_and_records_error()
 #[tokio::test(flavor = "current_thread")]
 async fn startup_failure_without_cached_provider_records_error_status() {
     let _guard = test_mutex().lock().expect("acquire test mutex");
+    enable_proprietary_mode_for_test();
     reset_test_fs();
     let _home = ensure_test_home();
     let state = test_state();
@@ -904,6 +918,7 @@ async fn startup_failure_without_cached_provider_records_error_status() {
 #[tokio::test(flavor = "current_thread")]
 async fn server_blocked_response_records_blocked_without_provider() {
     let _guard = test_mutex().lock().expect("acquire test mutex");
+    enable_proprietary_mode_for_test();
     reset_test_fs();
     let _home = ensure_test_home();
     let state = test_state();

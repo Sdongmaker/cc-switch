@@ -21,6 +21,9 @@ const RETRY_DELAYS_SECS: [u64; 4] = [60, 300, 900, 3600];
 #[cfg(feature = "proprietary-bootstrap")]
 static BACKGROUND_RETRY_SCHEDULED: AtomicBool = AtomicBool::new(false);
 
+#[cfg(all(feature = "proprietary-bootstrap", feature = "test-hooks"))]
+static TEST_MODE_ENABLED: AtomicBool = AtomicBool::new(false);
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct PublicState {
@@ -48,10 +51,29 @@ pub struct ClaimLinkPublicData {
 }
 
 pub fn is_enabled() -> bool {
-    if cfg!(feature = "test-hooks") {
+    if !cfg!(feature = "proprietary-bootstrap") {
         return false;
     }
-    cfg!(feature = "proprietary-bootstrap")
+
+    #[cfg(all(feature = "proprietary-bootstrap", feature = "test-hooks"))]
+    {
+        return TEST_MODE_ENABLED.load(Ordering::SeqCst);
+    }
+
+    #[cfg(not(all(feature = "proprietary-bootstrap", feature = "test-hooks")))]
+    {
+        true
+    }
+}
+
+#[cfg(feature = "test-hooks")]
+fn startup_is_disabled_for_tests() -> bool {
+    true
+}
+
+#[cfg(not(feature = "test-hooks"))]
+fn startup_is_disabled_for_tests() -> bool {
+    false
 }
 
 fn from_settings(settings: Option<&ProprietaryBootstrapSettings>) -> PublicState {
@@ -134,7 +156,7 @@ fn has_cached_managed_provider(state: &AppState) -> bool {
 
 #[cfg_attr(not(feature = "proprietary-bootstrap"), allow(unused_variables))]
 pub async fn run_startup(state: &AppState) -> Result<(), String> {
-    if !is_enabled() {
+    if !is_enabled() || startup_is_disabled_for_tests() {
         return Ok(());
     }
 
@@ -267,6 +289,11 @@ pub async fn retry_startup(state: &AppState) -> Result<PublicState, String> {
 
 #[cfg(all(feature = "proprietary-bootstrap", feature = "test-hooks"))]
 pub use client::{sign, signature_string, summarize_error};
+
+#[cfg(all(feature = "proprietary-bootstrap", feature = "test-hooks"))]
+pub fn set_enabled_for_test(enabled: bool) {
+    TEST_MODE_ENABLED.store(enabled, Ordering::SeqCst);
+}
 
 #[cfg(all(feature = "proprietary-bootstrap", feature = "test-hooks"))]
 pub async fn run_attempt_for_test(state: &AppState) -> Result<PublicState, String> {

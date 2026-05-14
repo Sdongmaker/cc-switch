@@ -104,6 +104,7 @@ mod tests {
     use serial_test::serial;
     use std::env;
     use std::fs;
+    use std::net::TcpListener;
     use std::path::{Path, PathBuf};
     use std::sync::{Arc, Mutex, OnceLock};
     use tempfile::TempDir;
@@ -160,6 +161,14 @@ mod tests {
         LOCK.get_or_init(|| Mutex::new(()))
             .lock()
             .unwrap_or_else(|err| err.into_inner())
+    }
+
+    fn unused_local_port() -> u16 {
+        TcpListener::bind("127.0.0.1:0")
+            .expect("bind ephemeral test port")
+            .local_addr()
+            .expect("read ephemeral test port")
+            .port()
     }
 
     fn with_test_home<T>(test: impl FnOnce(&AppState, &Path) -> T) -> T {
@@ -371,6 +380,8 @@ base_url = "http://localhost:8080"
 
         let db = Arc::new(Database::memory().expect("init db"));
         let state = AppState::new(db.clone());
+        let proxy_port = unused_local_port();
+        let proxy_url = format!("http://127.0.0.1:{proxy_port}");
 
         let original = Provider::with_id(
             "p1".into(),
@@ -393,6 +404,7 @@ base_url = "http://localhost:8080"
             .expect("set local current provider");
 
         db.update_proxy_config(ProxyConfig {
+            listen_port: proxy_port,
             live_takeover_active: true,
             ..Default::default()
         })
@@ -413,7 +425,7 @@ base_url = "http://localhost:8080"
             &get_claude_settings_path(),
             &json!({
                 "env": {
-                    "ANTHROPIC_BASE_URL": "http://127.0.0.1:15721",
+                    "ANTHROPIC_BASE_URL": proxy_url,
                     "ANTHROPIC_API_KEY": "PROXY_MANAGED",
                     "ANTHROPIC_MODEL": "stale-model"
                 },
@@ -475,7 +487,7 @@ base_url = "http://localhost:8080"
             live.get("env")
                 .and_then(|env| env.get("ANTHROPIC_BASE_URL"))
                 .and_then(|v| v.as_str()),
-            Some("http://127.0.0.1:15721"),
+            Some(proxy_url.as_str()),
             "proxy base URL should stay intact"
         );
         assert!(
@@ -484,6 +496,11 @@ base_url = "http://localhost:8080"
                 .is_none(),
             "model override should be removed in takeover live config"
         );
+        state
+            .proxy_service
+            .stop()
+            .await
+            .expect("stop proxy service");
     }
 
     #[test]
